@@ -1,0 +1,9 @@
+app/build/
+*.apk
+*.ap_
+*.aab
+*.idsig
+*.keystore
+*.jks
+.DS_Store
+Thumbs.db
