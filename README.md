@@ -1,126 +1,172 @@
 <div align="center">
 
-# CORVO
+![Corvo Banner](docs/00-hero.png)
 
-**A 392 KB, 100% offline running & physiology companion for Android.**
-Zero accounts. Zero ads. Zero internet permission. Built in pure Java & XML.
+<p>
+  <img src="https://img.shields.io/badge/APK%20Size-392%20KB-00E5A0?style=for-the-badge" alt="392 KB APK" />
+  <img src="https://img.shields.io/badge/INTERNET%20Permission-NONE-FF5252?style=for-the-badge" alt="Zero Internet Permission" />
+  <img src="https://img.shields.io/badge/Android-7.0%2B-1E293B?style=for-the-badge" alt="Android 7.0+" />
+  <img src="https://img.shields.io/badge/Pure%20Java%20%2B%20XML-No%20Gradle-00B4D8?style=for-the-badge" alt="Pure Java" />
+  <img src="https://img.shields.io/badge/License-MIT-64748B?style=for-the-badge" alt="MIT License" />
+</p>
 
-![Corvo Features Overview](docs/corvo-features.png)
+<h3>
+  <a href="https://github.com/Ayushxxy/Corvo/releases">Download Corvo v4.2 APK</a>
+  &nbsp;&middot;&nbsp;
+  <a href="#screenshots">Screenshots</a>
+  &nbsp;&middot;&nbsp;
+  <a href="#built-in-safeguards--hidden-powers">Safeguards &amp; Hidden Powers</a>
+  &nbsp;&middot;&nbsp;
+  <a href="#build-from-source-no-gradle">Build From Source</a>
+</h3>
 
 </div>
 
 ---
 
-## Why Corvo?
+## Why Corvo Exists
 
-Most modern running apps are **150–300 MB**, force you to create an account, lock basic analytics behind monthly subscriptions, and quietly upload your GPS routes and heart data to cloud servers.
+Most fitness apps are **150–300 MB**, force logins and cloud sync, charge subscriptions for basic stats, and quietly collect your GPS routes and health patterns.
 
-**Corvo is the opposite:**
-- **~392 KB total APK size** — faster to download than a single photo, zero lag even on entry-level Android phones.
-- **No `INTERNET` permission** — physically incapable of sending a single byte off your device. Everything stays on your phone.
-- **Real sensor engineering, zero fluff** — built-in Camera + Flash Heart Rate measurement, motion-guarded GPS + Stride tracking, recovery analysis, and 6 offline health tools in one dark AMOLED app.
-
----
-
-## Core Engines & Features
-
-### 1. Camera Pulse — Real-Time Optical Heart Rate (BPM)
-*Found inside `TOOLS → CAMERA PULSE` (and offered automatically right after saving a timed run).*
-
-You don't need a smartwatch to check your resting or post-run heart rate. **Camera Pulse** uses your phone's rear camera + LED flash to measure your pulse optically (Photoplethysmography / PPG):
-
-- **How it works in plain terms:** Every heartbeat pushes fresh blood through the tiny vessels in your fingertip, making your skin absorb slightly more light for a split second. When you gently cover the camera lens and flash, Camera Pulse reads those subtle color shifts **30 times a second** and draws your live pulse wave in real time.
-- **No auto-exposure glitches:** Android cameras normally keep brightening and dimming automatically, which ruins pulse readings. Corvo waits 1.5 seconds for your finger to settle, then **locks exposure & white balance** so the only signal left is your actual heartbeat.
-- **Built for real hands (not lab tripods):** A 2-pass zero-phase drift filter removes tiny hand shakes and breathing sway before matching individual beat intervals and signal periodicity across 42–205 BPM. If your finger slips or the signal is noisy, Corvo rejects bad frames instead of guessing a fake number.
-- **Pulse Log & Ecosystem Sync:** Tag measurements as **`RESTING`**, **`POST-RUN`**, or **`CHECK`**. Post-run BPM saves straight onto your run record, and your Resting BPM automatically feeds into your **Strength Level** score.
+**Corvo is built on a different rule:**
+- **392 KB total APK** — smaller than a single photo, zero lag even on budget phones.
+- **Zero `INTERNET` permission** — physically incapable of uploading, tracking, or calling any server.
+- **Real sensor engineering inside one AMOLED app** — 3-layer offline GPS/Stride tracker, real-time Camera + Flash optical heart rate scanner, recovery intelligence, and 6 synced physiology labs.
 
 ---
 
-### 2. CroSite — 3-Layer Offline GPS + Stride Bridge
-*Found inside the center `▶` Play / Timer tab (`CROSITE GPS` vs `TIMER ONLY`).*
+## Real App Screenshots
 
-Raw phone GPS drifts constantly when you stand still and drops out under trees or bridges. **CroSite** combines three lightweight layers so your outdoor distance stays clean:
+### Core Experience — Home, CroSite Timer, Camera Pulse & Tools
+| Home & Recovery | CroSite Timer & Rest | Camera Pulse PPG | Tools (6 Engines) |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/ss-home.jpg" width="195" alt="Home screen" /> | <img src="docs/ss-timer.jpg" width="195" alt="CroSite Timer" /> | <img src="docs/ss-pulse.jpg" width="195" alt="Camera Pulse PPG" /> | <img src="docs/ss-tools.jpg" width="195" alt="Tools Grid" /> |
 
-1. **Motion Guard (No Fake Drift):** Uses your phone's accelerometer to confirm real running movement before accepting small GPS hops — standing at a crossing won't pile up ghost meters.
-2. **Screen-Off Foreground Tracking:** Runs cleanly as a low-power foreground service with a wake lock so your distance keeps counting inside your pocket with the screen off.
-3. **Self-Calibrating Stride Bridge:** As you run with good GPS, CroSite learns your natural stride automatically. If satellites briefly drop under heavy cover, it bridges the gap from your real stride instead of freezing.
-4. **Smart Lap Rest Support:** Switch to **`RUN`** mode and press **`LAP`** anytime to mark a segment and trigger an automatic **60-second rest countdown**. CroSite pauses automatically during your rest and resumes the instant you finish or tap **`SKIP REST`**. When you hit **`SAVE RUN`**, your measured distance pre-fills cleanly.
-
----
-
-### 3. Recovery Brain & Flexible Streak System
-Corvo tracks consistency without punishing real recovery:
-
-- **Cold-Start Aware (`STILL LEARNING`):** New runners aren't falsely flagged for overload on Day 1 — Corvo watches your first runs to establish a personal baseline first.
-- **4-Signal Analysis:** Compares your current week against your true baseline across **Load** (including sudden 1-day distance spikes), **Intensity** (back-to-back fast days), **Fatigue** (consecutive run days), and **Mood** delta (`PRIMED · STEADY · CAUTION · REST CALL`).
-- **Flexible Rest Days (`Settings → REST DAY`):** Pick up to **2 weekly default rest days** or move rest days inside the current week without breaking your streak. If Recovery Brain spots overload, tap **`REST TODAY`** right inside the breakdown panel to shift a rest day immediately.
-- **6 Crow Evolution Ranks:** Streak milestones (**7 · 15 · 30 · 50 · 100 · 365 days**) unlock progressive Crow forms from **Couch** up to **Legend**.
+### Deep Insights — Mood, Run Log, Radar & Time Machine
+| Mood Insight & Score | History & Backup | Radar & Week-over-Week | Trends & Time Machine |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/ss-mood.jpg" width="195" alt="Mood Insight" /> | <img src="docs/ss-log.jpg" width="195" alt="Run Log" /> | <img src="docs/ss-radar.jpg" width="195" alt="5-Axis Radar" /> | <img src="docs/ss-trends.jpg" width="195" alt="Pace Trend and Time Machine" /> |
 
 ---
 
-### 4. TOOLS Tab — 6 Offline Physiology Labs
-All synced two-way with your personal **THE FILE** profile (zero duplicated entry):
+## 01 &middot; CroSite — 3-Layer Offline GPS + Stride Bridge
+*Inside the center **`▶`** tab (`CROSITE GPS` vs `TIMER ONLY`).*
 
-1. **Camera Pulse:** Live PPG optical BPM scanner + tagged **Pulse Log**.
-2. **Strength Level:** Combines auto Cardio + Resting BPM with bodyweight reps (**Pushups, Squats, Pullups** & a built-in live **Plank** stopwatch).
-3. **BMI:** Instant Body Mass Index with healthy range markers.
-4. **Body Fat %:** Offline US Navy waist/neck/hip estimator.
-5. **Pace & Split Calculator:** Convert target distance & time into pace, speed, and split targets.
-6. **Hydration Target:** Daily baseline + sweat-adjusted water goal from your weight & activity.
+Raw GPS bounces around while standing still and drops out under trees or flyovers. **CroSite** combines three lightweight layers so distance stays honest without Maps APIs or internet:
 
----
+1. **Motion Guard (Zero Ghost Drift):** Reads the phone accelerometer to confirm real footsteps before accepting small GPS jumps — standing at a crossing won't add fake meters.
+2. **Smart Satellite Gate & Screen-Off Tracking:** Filters weak indoor fixes while still capturing sprints, running cleanly in your pocket via a low-power foreground service (`PARTIAL_WAKE_LOCK`).
+3. **Self-Calibrating Stride Bridge:** Learns your personal stride length from height + clean GPS segments. If signal temporarily drops under trees or bridges, it bridges the gap cleanly without double-counting when GPS returns.
+4. **60s `LAP` Rest Auto-Pause:** In `RUN` mode, tapping `LAP` records your split and starts a 1-minute walk break — **CroSite automatically pauses during rest** and resumes the second you finish or tap `SKIP REST`.
 
-### 5. `THE FILE`, Time Machine, Share Cards & 100% Local Backup
-- **`THE FILE` (Tap the Crow on Home):** Your local runner dossier showing Name, Codename, Body/BMI, Age, City, All-Time Record, **Mood Profile**, and **Strongest Day**. Tap any row to update all fields in one place.
-- **Mood Insight:** Log your before/after run emojis to discover how your starting mood shifts your actual `/km` pace in plain English.
-- **Time Machine (`BEST` tab slider):** Scrub backward through past dates to view historical streaks, stats, and trends as they stood on any day.
-- **Offline PNG Share Cards (`LOG → SHARE`):** Export crisp dark AMOLED posters (**Radar Profile**, **Stat Card**, **Day Card** with lap curves, and **Runner Dossier**).
-- **Single-File JSON Backup (`LOG → EXPORT / IMPORT`):** Save everything — runs, laps, BPM, body measurements, and Pulse Log — into one portable `corvo-backup.json` file. Merging never wipes existing entries.
-- **1×1 Streak Widget:** Add Corvo's lightweight home-screen streak widget from your phone's launcher.
+![CroSite 3-Layer Architecture](docs/01-crosite.png)
 
 ---
 
-## Quick Controls & Hidden Triggers
+## 02 &middot; Camera Pulse — Live Optical Heart Rate (PPG)
+*Inside `TOOLS → CAMERA PULSE` (and offered in 1 tap right after saving a timed run).*
 
-New to Corvo? You can also read this full guide inside the app anytime via **Settings (Gear Icon) → `HOW TO USE`**:
+Check your **Resting** or **Post-Run BPM** anytime without a smartwatch, using only your rear camera and LED flash:
 
-- **Tap `CORVO` Header:** View Corvo's Identity Card.
-- **Tap the Crow Card on Home:** Open **`THE FILE`** (dossier + editor).
-- **Tap the Recovery Strip:** View the 4-bar Load/Intensity/Fatigue/Mood breakdown.
-- **Long-Press the Score Number:** Inspect the exact Run Score formula breakdown.
-- **Swipe Right on a Run in `LOG`:** Pin / Unpin a **⭐** milestone run to Home.
-- **Tap a Slider's Big Number in `TOOLS`:** Type an exact value manually.
+- **How it works:** Every heartbeat pushes blood into your fingertip, changing how light passes through your skin. Gently covering both the rear lens and flash lets Corvo read subtle brightness shifts **30 times per second** and plot a real-time pulse waveform.
+- **No auto-exposure glitches:** Phone cameras normally auto-adjust brightness continuously, ruining pulse waves. Corvo waits `1.5s` for your finger to settle, then **locks exposure & white balance** so only your heartbeat remains.
+- **Built for real hands:** A 2-pass zero-phase filter cancels tiny hand tremors and breathing sway, then checks both beat-to-beat intervals and signal rhythm across `42–205 BPM`. If the signal is shaky or pressed too hard, Corvo **rejects it cleanly instead of guessing**.
+- **Connected Ecosystem:** Measurements tag as **`RESTING`**, **`POST-RUN`**, or **`CHECK`** inside **Pulse Log**. Post-run BPM attaches directly to your run record, and your Resting BPM feeds automatically into **Strength Level**.
+
+![Camera Pulse PPG Engine](docs/02-pulse.png)
+
+---
+
+## 03 &middot; TOOLS — 6 Synced Offline Performance Labs
+All 6 tools share a single source of truth with your **`THE FILE`** profile — enter height or weight once and everything updates together:
+
+- **Camera Pulse:** 15s finger PPG scanner + tagged Pulse Log + Resting BPM baseline.
+- **Strength Level:** Fuses automatic Cardio + Resting BPM with bodyweight reps (**Pushups, Squats, Pullups** + built-in live **Plank** stopwatch).
+- **BMI Tracker:** Segmented health zone synced two-way with `THE FILE`.
+- **Body Fat %:** Offline US Navy waist/neck/hip estimator showing Lean Mass vs Fat Mass.
+- **Pace & Split Calculator:** Instant target paces, speeds, and checkpoint splits (`1K–21K`).
+- **Hydration Target:** Daily baseline + run recovery liters tuned to temperature and duration.
+
+![Tools Performance Lab](docs/03-tools.png)
+
+---
+
+## 04 &middot; Recovery Brain, Time Machine & Zero-Surveillance Core
+
+- **Recovery Brain (`PRIMED · STEADY · CAUTION · REST CALL`):** Compares this week against your personal baseline across **Load, Intensity, Fatigue & Mood**. Up to **2 flexible Rest Days/week** protect your streak, and **`REST TODAY`** lets you shift a rest day immediately when overloaded.
+- **Time Machine & 5-Axis Radar (`BEST` tab):** Scrub the timeline slider backward to inspect streaks, tiles, and trends on any past date.
+- **Mood Insight & `THE FILE`:** Log before/after mood emojis to learn in plain English how mood changes your `/km` pace; tap the Home Crow card anytime to open **`THE FILE`** (dossier, age, BMI, Strongest Day & Dossier PNG).
+- **Offline PNG Cards & Single-File JSON Backup (`LOG` tab):** Share dark AMOLED **Radar, Stat, Day (with lap curves)**, and **Dossier** posters offline, or export/merge everything into one portable `corvo-backup.json` file.
+
+![Core Corvo Architecture](docs/04-core.png)
+
+---
+
+## Built-In Safeguards & Hidden Powers
+
+<details>
+<summary><b>🛡️ 8 Automatic Safeguards (Typo Guard, Spike Warnings & Signal Protection)</b></summary>
+
+1. **Smart Typo Guard (`DOUBLE-CHECK`):** Accidentally entered `30` km instead of `3.0` km, or unrealistically fast timing? Whenever distance exceeds **`3×` your longest run ever** or pace is faster than **`2:30/km`**, Corvo pauses before saving and asks you to verify (`Save anyway?`). Impossible inputs (`>200 km` or `>600 min`) are blocked outright.
+2. **Weekly Ramp Guard (`TAPER DOWN` / `SWEET SPOT`):** Automatically compares this week's total distance against last week's (`0.8×–1.5×` = sweet spot; **`≥ 1.5×` jump** displays an amber **`LOAD X.X× LAST WEEK · TAPER DOWN`** alert).
+3. **Single-Day Spike Detector:** If yesterday's run was **`≥ 2.5×` your previous week's daily average** (minimum 3 km), Recovery Brain triggers **`REST CALL`** (*"Yesterday was big"*) and offers **`REST TODAY`** to protect your streak.
+4. **Cold-Start Protection (`STILL LEARNING`):** New runners are never falsely warned about overload on Day 1 — Corvo waits until you build a real multi-run baseline first.
+5. **Camera Pulse Anti-Fake-BPM Lock:** If you press too hard (blocking fingertip blood flow) or move mid-scan, Corvo refuses to show a random guess.
+6. **Process-Death Timer & Rest Survival:** If the phone kills background apps or reboots mid-run, reopening Corvo restores your exact elapsed stopwatch, recorded laps, and 60s rest countdown.
+7. **Weekly Silent Auto-Backup (`corvo-auto.json`):** Once you have 3+ runs, Corvo quietly maintains a single rolling snapshot in `Documents/Corvo/corvo-auto.json` every 7 days without cluttering storage.
+8. **Non-Destructive Backup Import:** Importing `corvo-backup.json` merges runs, laps, BPM, and Pulse Log cleanly — never wiping existing entries.
+
+</details>
+
+<details>
+<summary><b>⚡ Hidden Triggers, Gestures & Quick Settings Tile (Also inside Settings → HOW TO USE)</b></summary>
+
+| Where | Action | What It Opens / Triggers |
+| :--- | :--- | :--- |
+| **Top `CORVO` Logo** | Tap | Opens **Corvo's Identity Card** (Rank, Class, Bonded Runner & Skills) |
+| **Home Crow Card** | Tap | Opens **`THE FILE`** (Full runner dossier + 1-dialog editor + Share Dossier) |
+| **Recovery Strip** | Tap | Opens 4-bar breakdown (**Load · Intensity · Fatigue · Mood**) + **`REST TODAY`** |
+| **Big Run Score Number** | **Long-Press** | Shows exact formula breakdown (Dist 30% · Pace 40% · Rhythm 20% · Impr 10%) |
+| **Any Run in `LOG`** | **Swipe Right** | Pins / unpins a **⭐ Milestone** directly onto your Home screen |
+| **Tool Slider Readouts** | Tap big number | Lets you type an exact custom number instead of dragging |
+| **Phone Quick Settings** | Add **`Corvo`** Tile | Pull down shade & tap once from anywhere to jump straight into a live run timer |
+| **Launcher Widgets** | Add **`1×1` Corvo** | Live home-screen streak counter (zero background drain) |
+| **Settings (Gear Icon)** | Tap **`HOW TO USE`** | Built-in offline cheat sheet covering every screen and trigger |
+
+</details>
+
+<details>
+<summary><b>🔒 Zero-Surveillance Permissions & Build From Source (No Gradle)</b></summary>
+
+### Permissions
+`INTERNET` is **completely absent** from `AndroidManifest.xml`:
+- `ACCESS_FINE_LOCATION` / `FOREGROUND_SERVICE` / `WAKE_LOCK` — Optional; used only when running with **CroSite GPS** active.
+- `CAMERA` — Optional; used only when opening **Camera Pulse** to read optical fingertip BPM (zero images/videos stored).
+- `POST_NOTIFICATIONS` — Optional; used only to display the silent live distance notification during an active CroSite run.
+
+### Build From Source (CLI · ~5 Seconds)
+Corvo compiles directly using Android SDK 33 build-tools (`aapt2`, `javac`, `d8`, `zipalign`, `apksigner`) with zero Gradle overhead:
+
+```bash
+# 1. Install Android SDK 33 + JDK 17 into /var/tmp/carvo-sdk
+bash setup.sh
+
+# 2. Compile, dex, align, and sign with a local debug keystore
+bash build.sh
+```
+
+Output APK is saved to `app/build/Corvo-debug.apk`.
+
+</details>
 
 ---
 
 ## Download & Install
 
-1. Open the **[Releases](https://github.com/Ayushxxy/Corvo/releases)** page on this repository.
-2. Download the latest **`Corvo-v*.apk`** file.
-3. Tap to install on Android 7.0+ (`minSdk 24`, `targetSdk 33`).
-4. On first launch, enter your name and optional height/weight/DOB/city so calories, BMI, and CroSite Stride Bridge calibrate to you from Day 1.
-
-### Permissions Explained
-Corvo requests **no network permissions at all** (`INTERNET` is completely absent from `AndroidManifest.xml`):
-- `ACCESS_FINE_LOCATION` / `FOREGROUND_SERVICE` / `WAKE_LOCK`: Optional — used only when you run with **CroSite GPS** enabled.
-- `CAMERA`: Optional — used only when you open **Camera Pulse** to read optical fingertip BPM (no photos or videos are saved).
-- `POST_NOTIFICATIONS`: Optional — shows the silent live distance notification during active CroSite tracking.
-
----
-
-## Build From Source (No Gradle Required)
-
-Corvo compiles cleanly from pure Android SDK 33 + JDK 17 in ~5 seconds using standard CLI tools (`aapt2`, `javac`, `d8`, `zipalign`, `apksigner`):
-
-```bash
-# 1. Install Android SDK 33 build-tools + JDK 17 into /var/tmp/carvo-sdk
-bash setup.sh
-
-# 2. Compile, dex, align, and sign locally
-bash build.sh
-```
-
-The build outputs `app/build/Corvo-debug.apk` signed with a locally generated debug keystore (never committed to git).
+1. Open the **[Releases](https://github.com/Ayushxxy/Corvo/releases)** page.
+2. Download the latest **`Corvo-v4.2.apk`**.
+3. Install on **Android 7.0+** (`minSdk 24`, `targetSdk 33`).
+4. On first launch, enter your name and optional height/weight/DOB/city — calories, BMI, and CroSite Stride Bridge calibrate immediately.
 
 ---
 
