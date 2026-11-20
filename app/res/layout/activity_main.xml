@@ -1,0 +1,2149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- ============ HOME TAB ============ -->
+        <ScrollView
+            android:id="@+id/homeScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingLeft="18dp"
+                android:paddingRight="18dp"
+                android:paddingTop="18dp"
+                android:paddingBottom="24dp">
+
+                <!-- HEADER -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    <com.carvo.app.GradientText
+                        android:id="@+id/hdrCorvo"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="CORVO"
+                        android:textSize="24sp"
+                        android:textStyle="bold"
+                        android:textColor="#00E5A0"
+                        android:letterSpacing="0.18" />
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="RUN MONITOR"
+                        android:textSize="10sp"
+                        android:textColor="#66708A"
+                        android:letterSpacing="0.25" />
+                    <TextView
+                        android:id="@+id/gearBtn"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="14dp"
+                        android:paddingLeft="6dp"
+                        android:paddingRight="2dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:text="@string/gear"
+                        android:textSize="20sp"
+                        android:textColor="#8A94A6" />
+                </LinearLayout>
+
+                <!-- CATEGORY CARD (THE CROW) -->
+                <LinearLayout
+                    android:id="@+id/catCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="@drawable/crow_bg"
+                    android:padding="18dp"
+                    android:layout_marginTop="16dp">
+                    <ImageView
+                        android:id="@+id/catCrow"
+                        android:layout_width="match_parent"
+                        android:layout_height="240dp"
+                        android:layout_marginTop="10dp"
+                        android:scaleType="fitCenter"
+                        android:contentDescription="Rank crow" />
+                    <TextView
+                        android:id="@+id/catRank"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:textSize="30sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.22"
+                        android:textColor="#00E5A0" />
+                </LinearLayout>
+
+                <!-- RECOVERY BRAIN STRIP -->
+                <LinearLayout
+                    android:id="@+id/recCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="14dp"
+                    android:layout_marginTop="10dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:id="@+id/recDot"
+                            android:layout_width="8dp"
+                            android:layout_height="8dp" />
+                        <TextView
+                            android:id="@+id/recState"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="8dp"
+                            android:text="RECOVERY"
+                            android:textSize="10sp"
+                            android:letterSpacing="0.25"
+                            android:textColor="#8A94A6" />
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="1dp"
+                            android:layout_weight="1" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="BRAIN"
+                            android:textSize="9sp"
+                            android:letterSpacing="0.3"
+                            android:textColor="#4A5268" />
+                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/recMsg"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:textSize="12sp"
+                        android:letterSpacing="0.04"
+                        android:textColor="#B8C0D0" />
+                </LinearLayout>
+
+                <!-- TODAY CARD -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="20dp"
+                    android:layout_marginTop="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/dot" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="8dp"
+                            android:text="TODAY"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.25"
+                            android:textColor="#8A94A6" />
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="1dp"
+                            android:layout_weight="1" />
+                        <TextView
+                            android:id="@+id/todayDate"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textSize="10sp"
+                            android:textColor="#66708A" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/restBanner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="TODAY IS A REST DAY - STREAK WON'T BREAK. RUN &amp; SAVE = STREAK +1"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.08"
+                        android:textColor="#FFB454"
+                        android:visibility="gone" />
+
+                    <!-- INPUT PANE -->
+                    <LinearLayout
+                        android:id="@+id/inputPane"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginTop="16dp">
+                        <Button
+                            android:id="@+id/saveBtn"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:background="@drawable/btn_primary"
+                            android:stateListAnimator="@null"
+                            android:text="SAVE RUN"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.15"
+                            android:textColor="#07121C" />
+                    </LinearLayout>
+
+                    <!-- STAT PANE -->
+                    <LinearLayout
+                        android:id="@+id/statPane"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginTop="14dp"
+                        android:visibility="gone">
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            <TextView
+                                android:id="@+id/bigSpeed"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:textSize="50sp"
+                                android:textStyle="bold"
+                                android:textColor="#F2F5FA" />
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:layout_marginLeft="12dp">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="KM/H"
+                                    android:textSize="12sp"
+                                    android:textStyle="bold"
+                                    android:letterSpacing="0.2"
+                                    android:textColor="#00E5A0" />
+                                <TextView
+                                    android:id="@+id/speedTag"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:textSize="10sp"
+                                    android:textColor="#66708A" />
+                            </LinearLayout>
+                        </LinearLayout>
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="14dp"
+                            android:background="?attr/dividerColor" />
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="14dp">
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical"
+                                android:gravity="center_horizontal">
+                                <TextView
+                                    android:id="@+id/miniKm"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textSize="16sp"
+                                    android:textStyle="bold"
+                                    android:textColor="#F2F5FA" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="KM"
+                                    android:textSize="9sp"
+                                    android:letterSpacing="0.15"
+                                    android:textColor="#66708A" />
+                            </LinearLayout>
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical"
+                                android:gravity="center_horizontal">
+                                <TextView
+                                    android:id="@+id/miniMin"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textSize="16sp"
+                                    android:textStyle="bold"
+                                    android:textColor="#F2F5FA" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="TIME"
+                                    android:textSize="9sp"
+                                    android:letterSpacing="0.15"
+                                    android:textColor="#66708A" />
+                            </LinearLayout>
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical"
+                                android:gravity="center_horizontal">
+                                <TextView
+                                    android:id="@+id/miniPace"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textSize="16sp"
+                                    android:textStyle="bold"
+                                    android:textColor="#F2F5FA" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="MIN/KM"
+                                    android:textSize="9sp"
+                                    android:letterSpacing="0.15"
+                                    android:textColor="#66708A" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <!-- MOOD ROWS -->
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="14dp"
+                            android:background="?attr/dividerColor" />
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="12dp"
+                            android:gravity="center_vertical">
+                            <TextView
+                                android:layout_width="52dp"
+                                android:layout_height="wrap_content"
+                                android:text="BEFORE"
+                                android:textSize="9sp"
+                                android:letterSpacing="0.15"
+                                android:textColor="#66708A" />
+                            <TextView
+                                android:id="@+id/moodPre0"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginLeft="10dp"
+                                android:padding="6dp"
+                                android:clickable="true"
+                                android:textSize="20sp" />
+                            <TextView
+                                android:id="@+id/moodPre1"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginLeft="10dp"
+                                android:padding="6dp"
+                                android:clickable="true"
+                                android:textSize="20sp" />
+                            <TextView
+                                android:id="@+id/moodPre2"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginLeft="10dp"
+                                android:padding="6dp"
+                                android:clickable="true"
+                                android:textSize="20sp" />
+                            <TextView
+                                android:id="@+id/moodPre3"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginLeft="10dp"
+                                android:padding="6dp"
+                                android:clickable="true"
+                                android:textSize="20sp" />
+                        </LinearLayout>
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="6dp"
+                            android:gravity="center_vertical">
+                            <TextView
+                                android:layout_width="52dp"
+                                android:layout_height="wrap_content"
+                                android:text="AFTER"
+                                android:textSize="9sp"
+                                android:letterSpacing="0.15"
+                                android:textColor="#66708A" />
+                            <TextView
+                                android:id="@+id/moodPost0"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginLeft="10dp"
+                                android:padding="6dp"
+                                android:clickable="true"
+                                android:textSize="20sp" />
+                            <TextView
+                                android:id="@+id/moodPost1"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginLeft="10dp"
+                                android:padding="6dp"
+                                android:clickable="true"
+                                android:textSize="20sp" />
+                            <TextView
+                                android:id="@+id/moodPost2"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginLeft="10dp"
+                                android:padding="6dp"
+                                android:clickable="true"
+                                android:textSize="20sp" />
+                            <TextView
+                                android:id="@+id/moodPost3"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginLeft="10dp"
+                                android:padding="6dp"
+                                android:clickable="true"
+                                android:textSize="20sp" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/editBtn"
+                            android:layout_width="match_parent"
+                            android:layout_height="46dp"
+                            android:layout_marginTop="16dp"
+                            android:background="?attr/inputBg"
+                            android:stateListAnimator="@null"
+                            android:text="EDIT TODAY'S RUN"
+                            android:textSize="12sp"
+                            android:letterSpacing="0.12"
+                            android:textColor="#00E5A0" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- PINNED CARD (HOME ONLY) -->
+                <LinearLayout
+                    android:id="@+id/pinnedCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="18dp"
+                    android:layout_marginTop="14dp"
+                    android:visibility="gone">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/dot" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="8dp"
+                            android:text="PINNED"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.25"
+                            android:textColor="#8A94A6" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:id="@+id/pinnedList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginTop="8dp" />
+                </LinearLayout>
+
+                <!-- MOOD INSIGHT CARD -->
+                <LinearLayout
+                    android:id="@+id/moodCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="18dp"
+                    android:layout_marginTop="14dp"
+                    android:visibility="gone">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/dot" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="8dp"
+                            android:text="MOOD INSIGHT"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.25"
+                            android:textColor="#8A94A6" />
+                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/moodText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:textSize="13sp"
+                        android:textColor="#F2F5FA" />
+                </LinearLayout>
+
+                <!-- LAST RUN SCORE CARD -->
+                <LinearLayout
+                    android:id="@+id/lastScoreCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="18dp"
+                    android:layout_marginTop="14dp"
+                    android:visibility="gone">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/dot" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="8dp"
+                            android:text="LAST RUN SCORE"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.25"
+                            android:textColor="#8A94A6" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center_vertical">
+                        <TextView
+                            android:id="@+id/lastScoreVal"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textSize="44sp"
+                            android:textStyle="bold"
+                            android:textColor="#00E5A0" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="6dp"
+                            android:text="/ 100"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:textColor="#66708A" />
+                        <TextView
+                            android:id="@+id/scoreStar"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="10dp"
+                            android:textSize="24sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:gravity="center"
+                    android:text="DATA STAYS ON THIS PHONE. NO INTERNET. NO ACCOUNTS."
+                    android:textSize="9sp"
+                    android:letterSpacing="0.1"
+                    android:textColor="#4A5268" />
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- ============ HISTORY TAB ============ -->
+        <ScrollView
+            android:id="@+id/histScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingLeft="18dp"
+                android:paddingRight="18dp"
+                android:paddingTop="18dp"
+                android:paddingBottom="24dp">
+
+                <!-- TOTAL RUNS BLOCK -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="18dp"
+                    android:layout_marginTop="12dp">
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:background="@drawable/dot" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="8dp"
+                        android:text="TOTAL RUNS"
+                        android:textSize="11sp"
+                        android:letterSpacing="0.25"
+                        android:textColor="#8A94A6" />
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+                    <TextView
+                        android:id="@+id/histRunsBig"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="26sp"
+                        android:textStyle="bold"
+                        android:textColor="#00E5A0" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/swipeHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:text="SWIPE A RUN RIGHT TO PIN IT"
+                    android:textSize="8sp"
+                    android:letterSpacing="0.15"
+                    android:textColor="#4A5268" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="12dp">
+                    <Button
+                        android:id="@+id/exportBtn"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:layout_marginRight="5dp"
+                        android:background="?attr/inputBg"
+                        android:stateListAnimator="@null"
+                        android:text="EXPORT"
+                        android:textSize="12sp"
+                        android:letterSpacing="0.12"
+                        android:textColor="#00E5A0" />
+                    <Button
+                        android:id="@+id/importBtn"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:layout_marginLeft="5dp"
+                        android:background="?attr/inputBg"
+                        android:stateListAnimator="@null"
+                        android:text="IMPORT"
+                        android:textSize="12sp"
+                        android:letterSpacing="0.12"
+                        android:textColor="#00E5A0" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="18dp"
+                    android:layout_marginTop="14dp">
+
+                    <TextView
+                        android:id="@+id/histEmpty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:layout_marginBottom="10dp"
+                        android:gravity="center"
+                        android:text="No runs yet. Today is day one."
+                        android:textSize="12sp"
+                        android:textColor="#66708A" />
+
+                    <LinearLayout
+                        android:id="@+id/histList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/backupAge"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center"
+                    android:textSize="9sp"
+                    android:letterSpacing="0.1"
+                    android:textColor="#4A5268"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- ============ RECORDS TAB ============ -->
+        <ScrollView
+            android:id="@+id/recScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingLeft="18dp"
+                android:paddingRight="18dp"
+                android:paddingTop="18dp"
+                android:paddingBottom="24dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:background="@drawable/dot" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="8dp"
+                        android:text="RECORDS"
+                        android:textSize="11sp"
+                        android:letterSpacing="0.25"
+                        android:textColor="#8A94A6" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tmBanner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.12"
+                    android:textColor="#FFB454"
+                    android:visibility="gone" />
+
+                <!-- BIG CURRENT STREAK CARD -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:background="?attr/cardBg"
+                    android:padding="22dp"
+                    android:layout_marginTop="16dp"
+                    android:gravity="center_vertical">
+                    <TextView
+                        android:id="@+id/recFlame"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="40sp" />
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginLeft="14dp">
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+                            <TextView
+                                android:id="@+id/recStreak"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:textSize="44sp"
+                                android:textStyle="bold"
+                                android:textColor="#F2F5FA" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginLeft="8dp"
+                                android:layout_gravity="center_vertical"
+                                android:text="DAY STREAK"
+                                android:textSize="11sp"
+                                android:letterSpacing="0.15"
+                                android:textColor="#8A94A6" />
+                        </LinearLayout>
+                        <TextView
+                            android:id="@+id/recBest"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:textSize="10sp"
+                            android:textColor="#66708A" />
+                    </LinearLayout>
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+                </LinearLayout>
+
+                <!-- STATS TILES -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="14dp">
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:background="?attr/tileBg"
+                        android:padding="14dp"
+                        android:layout_marginRight="5dp">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="TOTAL DISTANCE"
+                            android:textSize="9sp"
+                            android:letterSpacing="0.15"
+                            android:textColor="#66708A" />
+                        <TextView
+                            android:id="@+id/recTotal"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="#F2F5FA" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:background="?attr/tileBg"
+                        android:padding="14dp"
+                        android:layout_marginLeft="5dp">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="LONGEST RUN"
+                            android:textSize="9sp"
+                            android:letterSpacing="0.15"
+                            android:textColor="#66708A" />
+                        <TextView
+                            android:id="@+id/recLong"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="#F2F5FA" />
+                    </LinearLayout>
+                </LinearLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="10dp">
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:background="?attr/tileBg"
+                        android:padding="14dp"
+                        android:layout_marginRight="5dp">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="BEST PACE"
+                            android:textSize="9sp"
+                            android:letterSpacing="0.15"
+                            android:textColor="#66708A" />
+                        <TextView
+                            android:id="@+id/recPace"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="#F2F5FA" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:background="?attr/tileBg"
+                        android:padding="14dp"
+                        android:layout_marginLeft="5dp">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="BEST SPEED"
+                            android:textSize="9sp"
+                            android:letterSpacing="0.15"
+                            android:textColor="#66708A" />
+                        <TextView
+                            android:id="@+id/recSpeed"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="#F2F5FA" />
+                    </LinearLayout>
+                </LinearLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="10dp">
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:background="?attr/tileBg"
+                        android:padding="14dp"
+                        android:layout_marginRight="5dp">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="AVG PACE"
+                            android:textSize="9sp"
+                            android:letterSpacing="0.15"
+                            android:textColor="#66708A" />
+                        <TextView
+                            android:id="@+id/recAvgPace"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="#F2F5FA" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:background="?attr/tileBg"
+                        android:padding="14dp"
+                        android:layout_marginLeft="5dp">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="AVG SPEED"
+                            android:textSize="9sp"
+                            android:letterSpacing="0.15"
+                            android:textColor="#66708A" />
+                        <TextView
+                            android:id="@+id/recAvgSpeed"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="#F2F5FA" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- WEEK CHART CARD -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="18dp"
+                    android:layout_marginTop="14dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/dot" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="8dp"
+                            android:text="THIS WEEK"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.25"
+                            android:textColor="#8A94A6" />
+                    </LinearLayout>
+                    <com.carvo.app.BarView
+                        android:id="@+id/bars"
+                        android:layout_width="match_parent"
+                        android:layout_height="140dp"
+                        android:layout_marginTop="12dp" />
+                </LinearLayout>
+
+                <!-- THIS WEEK VS LAST WEEK CARD -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="18dp"
+                    android:layout_marginTop="14dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/dot" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="8dp"
+                            android:text="WoW (Week-over-Week)"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.2"
+                            android:textColor="#8A94A6" />
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="1dp"
+                            android:layout_weight="1" />
+                        <Button
+                            android:id="@+id/shareBtn"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:paddingLeft="16dp"
+                            android:paddingRight="16dp"
+                            android:background="?attr/inputBg"
+                            android:stateListAnimator="@null"
+                            android:text="SHARE"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.12"
+                            android:textColor="#00E5A0" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="12dp">
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:background="?attr/tileBg"
+                            android:padding="14dp"
+                            android:layout_marginRight="5dp">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="THIS WEEK"
+                                android:textSize="9sp"
+                                android:letterSpacing="0.15"
+                                android:textColor="#00E5A0" />
+                            <TextView
+                                android:id="@+id/wkThisKm"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:textColor="#F2F5FA" />
+                            <TextView
+                                android:id="@+id/wkThisRuns"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:textSize="10sp"
+                                android:textColor="#66708A" />
+                        </LinearLayout>
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:background="?attr/tileBg"
+                            android:padding="14dp"
+                            android:layout_marginLeft="5dp">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="LAST WEEK"
+                                android:textSize="9sp"
+                                android:letterSpacing="0.15"
+                                android:textColor="#66708A" />
+                            <TextView
+                                android:id="@+id/wkLastKm"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:textColor="#8A94A6" />
+                            <TextView
+                                android:id="@+id/wkLastRuns"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:textSize="10sp"
+                                android:textColor="#66708A" />
+                        </LinearLayout>
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="10dp">
+                        <TextView
+                            android:id="@+id/wkDkm"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:textColor="#66708A" />
+                        <TextView
+                            android:id="@+id/wkDr"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:textColor="#66708A" />
+                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/wkInsight"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center"
+                        android:textSize="10sp"
+                        android:letterSpacing="0.05"
+                        android:textColor="#8A94A6" />
+
+                    <TextView
+                        android:id="@+id/loadChip"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.1"
+                        android:textColor="#FFB454"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- SCORES CARD -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="18dp"
+                    android:layout_marginTop="14dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/dot" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="8dp"
+                            android:text="SCORES"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.25"
+                            android:textColor="#8A94A6" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="12dp">
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="center_horizontal">
+                            <TextView
+                                android:id="@+id/scoreLatest"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:textSize="34sp"
+                                android:textStyle="bold"
+                                android:textColor="#00E5A0" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="LATEST"
+                                android:textSize="9sp"
+                                android:letterSpacing="0.15"
+                                android:textColor="#66708A" />
+                        </LinearLayout>
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="center_horizontal">
+                            <TextView
+                                android:id="@+id/scoreBest"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:textColor="#F2F5FA" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="BEST"
+                                android:textSize="9sp"
+                                android:letterSpacing="0.15"
+                                android:textColor="#66708A" />
+                        </LinearLayout>
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="center_horizontal">
+                            <TextView
+                                android:id="@+id/scoreAvg"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:textColor="#F2F5FA" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="AVG"
+                                android:textSize="9sp"
+                                android:letterSpacing="0.15"
+                                android:textColor="#66708A" />
+                        </LinearLayout>
+                    </LinearLayout>
+                    <com.carvo.app.ScoreStrip
+                        android:id="@+id/scoreStrip"
+                        android:layout_width="match_parent"
+                        android:layout_height="46dp"
+                        android:layout_marginTop="12dp" />
+                </LinearLayout>
+
+                <!-- PROFILE RADAR CARD -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="18dp"
+                    android:layout_marginTop="14dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/dot" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="8dp"
+                            android:text="PROFILE"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.25"
+                            android:textColor="#8A94A6" />
+                    </LinearLayout>
+                    <com.carvo.app.RadarView
+                        android:id="@+id/radar"
+                        android:layout_width="match_parent"
+                        android:layout_height="260dp"
+                        android:layout_marginTop="8dp" />
+                </LinearLayout>
+
+                <!-- PACE TREND CARD -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="18dp"
+                    android:layout_marginTop="14dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/dot" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="8dp"
+                            android:text="PACE TREND"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.25"
+                            android:textColor="#8A94A6" />
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="1dp"
+                            android:layout_weight="1" />
+                        <TextView
+                            android:id="@+id/trendChip"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.1"
+                            android:textColor="#66708A" />
+                    </LinearLayout>
+                    <com.carvo.app.LineView
+                        android:id="@+id/paceLine"
+                        android:layout_width="match_parent"
+                        android:layout_height="130dp"
+                        android:layout_marginTop="12dp" />
+                </LinearLayout>
+
+                <!-- BADGES CARD -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="18dp"
+                    android:layout_marginTop="14dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/dot" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="8dp"
+                            android:text="STREAK BADGES"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.25"
+                            android:textColor="#8A94A6" />
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="1dp"
+                            android:layout_weight="1" />
+                        <TextView
+                            android:id="@+id/recNext"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:textColor="#00E5A0" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="12dp">
+                        <TextView
+                            android:id="@+id/b7"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:padding="12dp"
+                            android:background="@drawable/badge_off"
+                            android:text="7"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:textColor="#4A5268" />
+                        <TextView
+                            android:id="@+id/b15"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginLeft="6dp"
+                            android:gravity="center"
+                            android:padding="12dp"
+                            android:background="@drawable/badge_off"
+                            android:text="15"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:textColor="#4A5268" />
+                        <TextView
+                            android:id="@+id/b30"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginLeft="6dp"
+                            android:gravity="center"
+                            android:padding="12dp"
+                            android:background="@drawable/badge_off"
+                            android:text="30"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:textColor="#4A5268" />
+                        <TextView
+                            android:id="@+id/b50"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginLeft="6dp"
+                            android:gravity="center"
+                            android:padding="12dp"
+                            android:background="@drawable/badge_off"
+                            android:text="50"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:textColor="#4A5268" />
+                        <TextView
+                            android:id="@+id/b100"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginLeft="6dp"
+                            android:gravity="center"
+                            android:padding="12dp"
+                            android:background="@drawable/badge_off"
+                            android:text="100"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:textColor="#4A5268" />
+                        <TextView
+                            android:id="@+id/b365"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginLeft="6dp"
+                            android:gravity="center"
+                            android:padding="12dp"
+                            android:background="@drawable/badge_off"
+                            android:text="365"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:textColor="#4A5268" />
+                    </LinearLayout>
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center"
+                        android:text="7 / 15 / 30 / 50 / 100 / 365 DAYS"
+                        android:textSize="8sp"
+                        android:letterSpacing="0.15"
+                        android:textColor="#4A5268" />
+                </LinearLayout>
+
+                <!-- TIME MACHINE CARD -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="18dp"
+                    android:layout_marginTop="14dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <View
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/dot" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="8dp"
+                            android:text="TIME MACHINE"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.25"
+                            android:textColor="#8A94A6" />
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="1dp"
+                            android:layout_weight="1" />
+                        <TextView
+                            android:id="@+id/tmDate"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.1"
+                            android:textColor="#FFB454" />
+                    </LinearLayout>
+                    <com.carvo.app.TimeBar
+                        android:id="@+id/tmBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="76dp"
+                        android:layout_marginTop="10dp" />
+                    <Button
+                        android:id="@+id/tmBack"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:layout_marginTop="8dp"
+                        android:background="?attr/inputBg"
+                        android:stateListAnimator="@null"
+                        android:text="BACK TO TODAY"
+                        android:textSize="12sp"
+                        android:letterSpacing="0.12"
+                        android:textColor="#FFB454"
+                        android:visibility="gone" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center"
+                        android:text="DRAG THE BAR TO TRAVEL THROUGH YOUR RUNNING PAST"
+                        android:textSize="8sp"
+                        android:letterSpacing="0.15"
+                        android:textColor="#4A5268" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:gravity="center"
+                    android:text="EVERY STAT IS COMPUTED LIVE FROM YOUR RUNS."
+                    android:textSize="9sp"
+                    android:letterSpacing="0.1"
+                    android:textColor="#4A5268" />
+            </LinearLayout>
+        </ScrollView>
+        <!-- ============ RUN TAB ============ -->
+        <ScrollView
+            android:id="@+id/runScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingLeft="18dp"
+                android:paddingRight="18dp"
+                android:paddingTop="18dp"
+                android:paddingBottom="24dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:background="@drawable/dot" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="8dp"
+                        android:text="RUN TIMER"
+                        android:textSize="11sp"
+                        android:letterSpacing="0.25"
+                        android:textColor="#8A94A6" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/batWarnCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="?attr/inputBg"
+                    android:paddingLeft="14dp"
+                    android:paddingRight="10dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                    android:layout_marginTop="12dp"
+                    android:visibility="gone">
+                    <TextView
+                        android:id="@+id/batWarnTxt"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:text="SET BATTERY TO UNRESTRICTED FOR SCREEN-OFF GPS · TAP TO OPEN"
+                        android:textSize="9sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.08"
+                        android:textColor="#FFB454" />
+                    <TextView
+                        android:id="@+id/batWarnDismiss"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:gravity="center"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:text="\u00D7"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="#66708A" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="?attr/cardBg"
+                    android:padding="22dp"
+                    android:layout_marginTop="14dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+                        <TextView
+                            android:id="@+id/modeRunBtn"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:padding="12dp"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:background="?attr/inputBg"
+                            android:text="RUN"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.15"
+                            android:textColor="#00E5A0" />
+                        <TextView
+                            android:id="@+id/modeTimedBtn"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginLeft="6dp"
+                            android:gravity="center"
+                            android:padding="12dp"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:background="?attr/inputBg"
+                            android:text="TIMED"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.15"
+                            android:textColor="#66708A" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/croRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="8dp">
+                        <TextView
+                            android:id="@+id/croOnBtn"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:padding="9dp"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:background="@drawable/badge_on"
+                            android:text="CROSITE GPS"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.12"
+                            android:textColor="#00E5A0" />
+                        <TextView
+                            android:id="@+id/croOffBtn"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginLeft="6dp"
+                            android:gravity="center"
+                            android:padding="9dp"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:background="@drawable/badge_off"
+                            android:text="TIMER ONLY"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.12"
+                            android:textColor="#66708A" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/croStatusRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center"
+                        android:layout_marginTop="12dp">
+                        <View
+                            android:id="@+id/croDot"
+                            android:layout_width="7dp"
+                            android:layout_height="7dp"
+                            android:background="@drawable/dot" />
+                        <TextView
+                            android:id="@+id/croStatusTxt"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="6dp"
+                            android:text="CROSITE READY"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.12"
+                            android:textColor="#8A94A6" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/timedPane"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="18dp"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:id="@+id/tMinus"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
+                            android:gravity="center"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:background="?attr/inputBg"
+                            android:text="-"
+                            android:textSize="22sp"
+                            android:textStyle="bold"
+                            android:textColor="#F2F5FA" />
+
+                        <TextView
+                            android:id="@+id/timedMinTxt"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="18dp"
+                            android:layout_marginRight="18dp"
+                            android:minWidth="72dp"
+                            android:gravity="center"
+                            android:textSize="40sp"
+                            android:textStyle="bold"
+                            android:textColor="#00E5A0" />
+
+                        <TextView
+                            android:id="@+id/tPlus"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
+                            android:gravity="center"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:background="?attr/inputBg"
+                            android:text="+"
+                            android:textSize="22sp"
+                            android:textStyle="bold"
+                            android:textColor="#F2F5FA" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="14dp"
+                            android:text="MINUTES"
+                            android:textSize="9sp"
+                            android:letterSpacing="0.15"
+                            android:textColor="#66708A" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/timerText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="22dp"
+                        android:gravity="center"
+                        android:text="00:00"
+                        android:textSize="64sp"
+                        android:textStyle="bold"
+                        android:textColor="#F2F5FA" />
+
+                    <LinearLayout
+                        android:id="@+id/croLiveRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:background="?attr/inputBg"
+                        android:padding="14dp"
+                        android:layout_marginTop="14dp"
+                        android:visibility="gone">
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="center">
+                            <TextView
+                                android:id="@+id/croDistTxt"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0.00"
+                                android:textSize="24sp"
+                                android:textStyle="bold"
+                                android:textColor="#00E5A0" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="CROSITE KM"
+                                android:textSize="8sp"
+                                android:letterSpacing="0.15"
+                                android:textColor="#66708A" />
+                        </LinearLayout>
+                        <View
+                            android:layout_width="1dp"
+                            android:layout_height="match_parent"
+                            android:background="?attr/dividerColor" />
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="center">
+                            <TextView
+                                android:id="@+id/croPaceTxt"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="\u2014"
+                                android:textSize="24sp"
+                                android:textStyle="bold"
+                                android:textColor="#F2F5FA" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="AVG PACE"
+                                android:textSize="8sp"
+                                android:letterSpacing="0.15"
+                                android:textColor="#66708A" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/timerHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center"
+                        android:textSize="10sp"
+                        android:letterSpacing="0.1"
+                        android:textColor="#66708A" />
+
+                    <LinearLayout
+                        android:id="@+id/lapRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="16dp"
+                        android:visibility="gone">
+
+                        <Button
+                            android:id="@+id/btnLap"
+                            android:layout_width="0dp"
+                            android:layout_height="46dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/btn_primary"
+                            android:stateListAnimator="@null"
+                            android:text="LAP"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.15"
+                            android:textColor="#07121C" />
+
+                        <Button
+                            android:id="@+id/btnLapUndo"
+                            android:layout_width="0dp"
+                            android:layout_height="46dp"
+                            android:layout_weight="1"
+                            android:layout_marginLeft="6dp"
+                            android:background="?attr/inputBg"
+                            android:stateListAnimator="@null"
+                            android:text="UNDO"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.15"
+                            android:textColor="#00E5A0" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/lapInfo"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center"
+                        android:textSize="10sp"
+                        android:letterSpacing="0.1"
+                        android:textColor="#8A94A6" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="20dp"
+                        android:background="?attr/dividerColor" />
+
+                    <Button
+                        android:id="@+id/btnStart"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="20dp"
+                        android:background="@drawable/btn_primary"
+                        android:stateListAnimator="@null"
+                        android:text="START"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.15"
+                        android:textColor="#07121C" />
+
+                    <Button
+                        android:id="@+id/btnPause"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="20dp"
+                        android:background="@drawable/btn_primary"
+                        android:stateListAnimator="@null"
+                        android:text="PAUSE"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.15"
+                        android:textColor="#07121C"
+                        android:visibility="gone" />
+
+                    <LinearLayout
+                        android:id="@+id/saveResumeRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="20dp"
+                        android:visibility="gone">
+                        <Button
+                            android:id="@+id/btnSaveRun"
+                            android:layout_width="0dp"
+                            android:layout_height="52dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/btn_primary"
+                            android:stateListAnimator="@null"
+                            android:text="SAVE RUN"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.12"
+                            android:textColor="#07121C" />
+                        <Button
+                            android:id="@+id/btnResume"
+                            android:layout_width="0dp"
+                            android:layout_height="52dp"
+                            android:layout_weight="1"
+                            android:layout_marginLeft="6dp"
+                            android:background="?attr/inputBg"
+                            android:stateListAnimator="@null"
+                            android:text="RESUME"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.12"
+                            android:textColor="#00E5A0" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btnDiscard"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:layout_marginTop="10dp"
+                        android:background="?attr/inputBg"
+                        android:stateListAnimator="@null"
+                        android:text="DISCARD"
+                        android:textSize="12sp"
+                        android:letterSpacing="0.12"
+                        android:textColor="#FFB454"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:gravity="center"
+                    android:text="TIMER &amp; CROSITE KEEP RUNNING EVEN IF CLOSED."
+                    android:textSize="9sp"
+                    android:letterSpacing="0.1"
+                    android:textColor="#4A5268" />
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- ============ TOOLS TAB (v4.0) ============ -->
+        <ScrollView
+            android:id="@+id/toolsScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/toolsList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingLeft="18dp"
+                android:paddingRight="18dp"
+                android:paddingTop="18dp"
+                android:paddingBottom="24dp" />
+        </ScrollView>
+    </FrameLayout>
+
+    <!-- ============ 5-ICON BOTTOM DOCK (GYMMANE STYLE) ============ -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="?attr/dockBg"
+        android:layout_marginLeft="18dp"
+        android:layout_marginRight="18dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="14dp"
+        android:padding="6dp">
+
+        <FrameLayout
+            android:id="@+id/tabHome"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Home">
+            <ImageView
+                android:id="@+id/icoHome"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_nav_home" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/tabHistory"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Log">
+            <ImageView
+                android:id="@+id/icoHistory"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_nav_log" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/tabRun"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1.15"
+            android:layout_marginLeft="4dp"
+            android:layout_marginRight="4dp"
+            android:background="@drawable/nav_play_off"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Run Timer">
+            <ImageView
+                android:id="@+id/icoRun"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_nav_play" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/tabRecords"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Best">
+            <ImageView
+                android:id="@+id/icoRecords"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_nav_best" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/tabTools"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Tools">
+            <ImageView
+                android:id="@+id/icoTools"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_nav_tools" />
+        </FrameLayout>
+    </LinearLayout>
+</LinearLayout>

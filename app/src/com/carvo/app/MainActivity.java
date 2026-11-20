@@ -1,0 +1,3957 @@
+package com.carvo.app;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ContentValues;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.drawable.GradientDrawable;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.PowerManager;
+import android.provider.MediaStore;
+import android.provider.Settings;
+import android.view.Gravity;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.animation.AlphaAnimation;
+import android.view.animation.Animation;
+import android.view.animation.ScaleAnimation;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+public class MainActivity extends Activity {
+
+    private static final int REQ_EXPORT = 11;
+    private static final int REQ_IMPORT = 22;
+    private static final int REQ_LOC = 33;
+    private static final int REQ_CAM = 44;
+
+    private static final String[] DAY_NAMES = {
+            "SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"
+    };
+    private static final String[] DAY_SHORT = {
+            "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"
+    };
+    private static final String[] MOOD_PRE = {
+            "\uD83D\uDE34", "\uD83D\uDE10", "\uD83D\uDE0A", "\uD83D\uDE24"
+    };
+    private static final String[] MOOD_POST = {
+            "\uD83D\uDE0A", "\uD83D\uDD25", "\uD83D\uDE0C", "\uD83D\uDC80"
+    };
+
+    private static final String[] MOOD_PRE_WORDS = {"SLEEPY", "FLAT", "HAPPY", "FIRED UP"};
+    private static final String[] MOOD_POST_WORDS = {"GOOD", "FIRED", "CALM", "DEAD"};
+
+    private RunStore store;
+    private SharedPreferences prefs;
+
+    private TextView todayDate, restBanner;
+    private TextView recState, recMsg;
+    private View recDot;
+    private View inputPane, statPane, homeScroll, histScroll, recScroll;
+    private TextView bigSpeed, speedTag, miniKm, miniMin, miniPace;
+    private TextView[] mPre = new TextView[4], mPost = new TextView[4];
+    private BarView bars;
+    private LineView paceLine;
+    private TextView trendChip;
+    private TextView lastScoreVal, scoreStar;
+    private View lastScoreCard, pinnedCard;
+    private LinearLayout pinnedList;
+    private Button saveBtn, editBtn, exportBtn, importBtn, shareBtn;
+    private View tabHome, tabHistory, tabRecords, tabTools;
+    private ImageView icoHome, icoHistory, icoRun, icoRecords, icoTools;
+    private View toolsScroll;
+    private LinearLayout toolsList;
+    private ToolsUI toolsUI;
+    private int curTab = 0;
+    private boolean uiResumed = false;
+    private LinearLayout histList;
+    private TextView histEmpty, histRunsBig;
+    private TextView recFlame, recStreak, recBest, recTotal, recLong, recPace, recSpeed,
+            recAvgPace, recAvgSpeed, recNext, wkThisKm, wkThisRuns, wkLastKm, wkLastRuns,
+            wkDkm, wkDr, wkInsight, scoreLatest, scoreBest, scoreAvg, moodText;
+    private View moodCard;
+    private ScoreStrip scoreStrip;
+    private TextView loadChip, backupAge;
+    private ImageView catCrow;
+    private TextView catRank;
+    private String viewDate = null;
+    private RunStore viewStore = null;
+    private TimeBar tmBar;
+    private TextView tmBanner, tmDate;
+    private Button tmBack;
+    private RadarView radar;
+
+    // ================= RUN TIMER + CROSITE =================
+    private static final int T_RUN = 0, T_TIMED = 1;
+    private static final int TS_IDLE = 0, TS_RUN = 1, TS_PAUSE = 2, TS_DONE = 3, TS_REST = 4;
+    private View runScroll, tabRun;
+    private TextView modeRunBtn, modeTimedBtn, tMinus, tPlus, timedMinTxt;
+    private View timedPane, saveResumeRow;
+    private TextView timerText, timerHint, lapInfo;
+    private Button btnStart, btnPause, btnSaveRun, btnResume, btnDiscard, btnLap, btnLapUndo;
+    private View lapRow;
+    private View croRow, croStatusRow, croDot, croLiveRow, batWarnCard;
+    private TextView croOnBtn, croOffBtn, croStatusTxt, croDistTxt, croPaceTxt, batWarnTxt, batWarnDismiss;
+    private LocationManager warmLm;
+    private boolean warmingUp = false;
+    private boolean pendingCroStart = false;
+    private final LocationListener warmListener = new LocationListener() {
+        @Override
+        public void onLocationChanged(Location loc) {
+            if (loc == null) return;
+            float acc = loc.hasAccuracy() ? loc.getAccuracy() : 999f;
+            CroSiteEngine.setWarmupSat(MainActivity.this, acc > 0 && acc <= CroSiteEngine.MAX_ACC_M, acc);
+            renderCroSiteUi();
+        }
+        @Override public void onStatusChanged(String p, int s, Bundle b) {}
+        @Override public void onProviderEnabled(String p) { renderCroSiteUi(); }
+        @Override public void onProviderDisabled(String p) { renderCroSiteUi(); }
+    };
+    private long restUntil;
+    private final ArrayList<Long> lapMs = new ArrayList<Long>();
+    private double[] pendingLaps;
+    private SharedPreferences tprefs;
+    private int tMode, tState, tTimedMin;
+    private long tAccMs, tRunSince;
+    private Handler tHand;
+    private final Runnable tTick = new Runnable() {
+        @Override
+        public void run() {
+            syncTimerPrefs();
+            if (tState == TS_RUN) {
+                if (tMode == T_TIMED && remainMs() <= 0) {
+                    tAccMs = tTimedMin * 60000L;
+                    tRunSince = 0L;
+                    tState = TS_DONE;
+                    saveT();
+                    if (CroSiteEngine.isEnabled(MainActivity.this)) {
+                        CroSiteService.dispatch(MainActivity.this, CroSiteService.ACT_PAUSE);
+                    }
+                    renderTimer();
+                    pulse(timerText);
+                    return;
+                }
+                renderTimer();
+                tHand.postDelayed(tTick, 500L);
+            } else if (tState == TS_REST) {
+                if (System.currentTimeMillis() >= restUntil) {
+                    tRunSince = System.currentTimeMillis();
+                    tState = TS_RUN;
+                    saveT();
+                    if (CroSiteEngine.isEnabled(MainActivity.this)) {
+                        CroSiteService.dispatch(MainActivity.this, CroSiteService.ACT_RESUME);
+                    }
+                }
+                renderTimer();
+                tHand.postDelayed(tTick, 250L);
+            }
+        }
+    };
+
+    @Override
+    protected void onCreate(Bundle b) {
+        super.onCreate(b);
+        prefs = getSharedPreferences("carvo", MODE_PRIVATE);
+        setTheme(isAmoled() ? R.style.AppThemeAmoled : R.style.AppTheme);
+        store = new RunStore(this);
+        setContentView(R.layout.activity_main);
+
+        todayDate = (TextView) findViewById(R.id.todayDate);
+        restBanner = (TextView) findViewById(R.id.restBanner);
+        recDot = findViewById(R.id.recDot);
+        recState = (TextView) findViewById(R.id.recState);
+        recMsg = (TextView) findViewById(R.id.recMsg);
+        findViewById(R.id.hdrCorvo).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                corvoCardDialog();
+            }
+        });
+        findViewById(R.id.recCard).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                recoveryDialog();
+            }
+        });
+        pressable(findViewById(R.id.hdrCorvo));
+        pressable(findViewById(R.id.catCard));
+        findViewById(R.id.catCard).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showFile();
+            }
+        });
+        pressable(findViewById(R.id.recCard));
+        inputPane = findViewById(R.id.inputPane);
+        statPane = findViewById(R.id.statPane);
+        bigSpeed = (TextView) findViewById(R.id.bigSpeed);
+        speedTag = (TextView) findViewById(R.id.speedTag);
+        miniKm = (TextView) findViewById(R.id.miniKm);
+        miniMin = (TextView) findViewById(R.id.miniMin);
+        miniPace = (TextView) findViewById(R.id.miniPace);
+        int[] preIds = {R.id.moodPre0, R.id.moodPre1, R.id.moodPre2, R.id.moodPre3};
+        int[] postIds = {R.id.moodPost0, R.id.moodPost1, R.id.moodPost2, R.id.moodPost3};
+        for (int i = 0; i < 4; i++) {
+            mPre[i] = (TextView) findViewById(preIds[i]);
+            mPost[i] = (TextView) findViewById(postIds[i]);
+        }
+        bars = (BarView) findViewById(R.id.bars);
+        paceLine = (LineView) findViewById(R.id.paceLine);
+        trendChip = (TextView) findViewById(R.id.trendChip);
+        lastScoreCard = findViewById(R.id.lastScoreCard);
+        lastScoreVal = (TextView) findViewById(R.id.lastScoreVal);
+        scoreStar = (TextView) findViewById(R.id.scoreStar);
+        pinnedCard = findViewById(R.id.pinnedCard);
+        pinnedList = (LinearLayout) findViewById(R.id.pinnedList);
+        saveBtn = (Button) findViewById(R.id.saveBtn);
+        editBtn = (Button) findViewById(R.id.editBtn);
+        homeScroll = findViewById(R.id.homeScroll);
+        histScroll = findViewById(R.id.histScroll);
+        recScroll = findViewById(R.id.recScroll);
+        toolsScroll = findViewById(R.id.toolsScroll);
+        toolsList = (LinearLayout) findViewById(R.id.toolsList);
+        tabHome = findViewById(R.id.tabHome);
+        tabHistory = findViewById(R.id.tabHistory);
+        tabRecords = findViewById(R.id.tabRecords);
+        tabTools = findViewById(R.id.tabTools);
+        icoHome = (ImageView) findViewById(R.id.icoHome);
+        icoHistory = (ImageView) findViewById(R.id.icoHistory);
+        icoRun = (ImageView) findViewById(R.id.icoRun);
+        icoRecords = (ImageView) findViewById(R.id.icoRecords);
+        icoTools = (ImageView) findViewById(R.id.icoTools);
+        toolsUI = new ToolsUI(this, store, prefs, toolsList, new ToolsUI.Host() {
+            @Override
+            public void onProfileChanged() {
+                render();
+            }
+
+            @Override
+            public boolean hasCameraPerm() {
+                if (Build.VERSION.SDK_INT < 23) return true;
+                return checkSelfPermission("android.permission.CAMERA") == PackageManager.PERMISSION_GRANTED;
+            }
+
+            @Override
+            public void requestCameraPerm() {
+                if (Build.VERSION.SDK_INT >= 23) {
+                    toast("Allow camera access to scan finger pulse");
+                    requestPermissions(new String[]{"android.permission.CAMERA"}, REQ_CAM);
+                }
+            }
+        });
+        histList = (LinearLayout) findViewById(R.id.histList);
+        histEmpty = (TextView) findViewById(R.id.histEmpty);
+        histRunsBig = (TextView) findViewById(R.id.histRunsBig);
+        exportBtn = (Button) findViewById(R.id.exportBtn);
+        importBtn = (Button) findViewById(R.id.importBtn);
+        recFlame = (TextView) findViewById(R.id.recFlame);
+        recStreak = (TextView) findViewById(R.id.recStreak);
+        recBest = (TextView) findViewById(R.id.recBest);
+        recTotal = (TextView) findViewById(R.id.recTotal);
+        recLong = (TextView) findViewById(R.id.recLong);
+        recPace = (TextView) findViewById(R.id.recPace);
+        recSpeed = (TextView) findViewById(R.id.recSpeed);
+        recAvgPace = (TextView) findViewById(R.id.recAvgPace);
+        recAvgSpeed = (TextView) findViewById(R.id.recAvgSpeed);
+        recNext = (TextView) findViewById(R.id.recNext);
+        wkThisKm = (TextView) findViewById(R.id.wkThisKm);
+        wkThisRuns = (TextView) findViewById(R.id.wkThisRuns);
+        wkLastKm = (TextView) findViewById(R.id.wkLastKm);
+        wkLastRuns = (TextView) findViewById(R.id.wkLastRuns);
+        wkDkm = (TextView) findViewById(R.id.wkDkm);
+        wkDr = (TextView) findViewById(R.id.wkDr);
+        wkInsight = (TextView) findViewById(R.id.wkInsight);
+        scoreLatest = (TextView) findViewById(R.id.scoreLatest);
+        scoreBest = (TextView) findViewById(R.id.scoreBest);
+        scoreAvg = (TextView) findViewById(R.id.scoreAvg);
+        scoreStrip = (ScoreStrip) findViewById(R.id.scoreStrip);
+        moodCard = findViewById(R.id.moodCard);
+        moodText = (TextView) findViewById(R.id.moodText);
+        shareBtn = (Button) findViewById(R.id.shareBtn);
+        runScroll = findViewById(R.id.runScroll);
+        tabRun = findViewById(R.id.tabRun);
+        croRow = findViewById(R.id.croRow);
+        croOnBtn = (TextView) findViewById(R.id.croOnBtn);
+        croOffBtn = (TextView) findViewById(R.id.croOffBtn);
+        croStatusRow = findViewById(R.id.croStatusRow);
+        croDot = findViewById(R.id.croDot);
+        croStatusTxt = (TextView) findViewById(R.id.croStatusTxt);
+        croLiveRow = findViewById(R.id.croLiveRow);
+        croDistTxt = (TextView) findViewById(R.id.croDistTxt);
+        croPaceTxt = (TextView) findViewById(R.id.croPaceTxt);
+        batWarnCard = findViewById(R.id.batWarnCard);
+        batWarnTxt = (TextView) findViewById(R.id.batWarnTxt);
+        batWarnDismiss = (TextView) findViewById(R.id.batWarnDismiss);
+        warmLm = (LocationManager) getSystemService(LOCATION_SERVICE);
+        modeRunBtn = (TextView) findViewById(R.id.modeRunBtn);
+        modeTimedBtn = (TextView) findViewById(R.id.modeTimedBtn);
+        timedPane = findViewById(R.id.timedPane);
+        tMinus = (TextView) findViewById(R.id.tMinus);
+        tPlus = (TextView) findViewById(R.id.tPlus);
+        timedMinTxt = (TextView) findViewById(R.id.timedMinTxt);
+        timerText = (TextView) findViewById(R.id.timerText);
+        timerHint = (TextView) findViewById(R.id.timerHint);
+        btnStart = (Button) findViewById(R.id.btnStart);
+        btnPause = (Button) findViewById(R.id.btnPause);
+        btnSaveRun = (Button) findViewById(R.id.btnSaveRun);
+        btnResume = (Button) findViewById(R.id.btnResume);
+        btnDiscard = (Button) findViewById(R.id.btnDiscard);
+        saveResumeRow = findViewById(R.id.saveResumeRow);
+        loadChip = (TextView) findViewById(R.id.loadChip);
+        backupAge = (TextView) findViewById(R.id.backupAge);
+        catCrow = (ImageView) findViewById(R.id.catCrow);
+        catRank = (TextView) findViewById(R.id.catRank);
+        tmBanner = (TextView) findViewById(R.id.tmBanner);
+        tmDate = (TextView) findViewById(R.id.tmDate);
+        tmBack = (Button) findViewById(R.id.tmBack);
+        tmBar = (TimeBar) findViewById(R.id.tmBar);
+        radar = (RadarView) findViewById(R.id.radar);
+        lapRow = findViewById(R.id.lapRow);
+        btnLap = (Button) findViewById(R.id.btnLap);
+        btnLapUndo = (Button) findViewById(R.id.btnLapUndo);
+        lapInfo = (TextView) findViewById(R.id.lapInfo);
+
+        recFlame.setText("\uD83D\uDD25"); // fire
+        scoreStar.setText("\u2B50");       // star
+
+        saveBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showDistance(false, null);
+            }
+        });
+        editBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showDistance(true, null);
+            }
+        });
+        findViewById(R.id.gearBtn).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                gearMenu();
+            }
+        });
+        tabHome.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showTab(0);
+            }
+        });
+        tabHistory.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showTab(1);
+            }
+        });
+        tabRecords.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showTab(2);
+            }
+        });
+        exportBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                doExport();
+            }
+        });
+        importBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                doImport();
+            }
+        });
+        shareBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                shareFlow();
+            }
+        });
+        tabRun.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showTab(3);
+            }
+        });
+        tabTools.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showTab(4);
+            }
+        });
+        croOnBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (tState != TS_IDLE) return;
+                CroSiteEngine.setEnabled(MainActivity.this, true);
+                renderTimer();
+                updateWarmup();
+                checkBatteryOpt();
+            }
+        });
+        croOffBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (tState != TS_IDLE) return;
+                CroSiteEngine.setEnabled(MainActivity.this, false);
+                stopWarmup();
+                renderTimer();
+                checkBatteryOpt();
+            }
+        });
+        batWarnTxt.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    Intent s = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    s.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(s);
+                } catch (Exception e) {
+                    toast("Open App Info > Battery > Unrestricted");
+                }
+            }
+        });
+        batWarnDismiss.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                prefs.edit().putBoolean("bat_dismissed", true).apply();
+                batWarnCard.setVisibility(View.GONE);
+            }
+        });
+
+        tprefs = getSharedPreferences("carvo_timer", MODE_PRIVATE);
+        tMode = tprefs.getInt("mode", T_RUN);
+        tState = tprefs.getInt("state", TS_IDLE);
+        tTimedMin = tprefs.getInt("timedMin", 30);
+        tAccMs = tprefs.getLong("accMs", 0L);
+        tRunSince = tprefs.getLong("runSince", 0L);
+        restUntil = tprefs.getLong("restUntil", 0L);
+        try {
+            org.json.JSONArray la = new org.json.JSONArray(tprefs.getString("laps", "[]"));
+            for (int i = 0; i < la.length(); i++) lapMs.add(la.getLong(i));
+        } catch (Exception ignored) {
+        }
+        tHand = new Handler();
+        modeRunBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setMode(T_RUN);
+            }
+        });
+        modeTimedBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setMode(T_TIMED);
+            }
+        });
+        tMinus.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                stepMin(-5);
+            }
+        });
+        tPlus.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                stepMin(5);
+            }
+        });
+        btnStart.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startT();
+            }
+        });
+        btnPause.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pauseT();
+            }
+        });
+        btnResume.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                resumeT();
+            }
+        });
+        btnSaveRun.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                savePromptT();
+            }
+        });
+        btnDiscard.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                discardT();
+            }
+        });
+        btnLap.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (tState == TS_REST) skipRest();
+                else lapT();
+            }
+        });
+        btnLapUndo.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                undoLap();
+            }
+        });
+        tmBar.setListener(new TimeBar.Listener() {
+            @Override
+            public void onDay(String d) {
+                if (d.equals(RunStore.today())) {
+                    viewDate = null;
+                    viewStore = null;
+                } else {
+                    viewDate = d;
+                    viewStore = d.compareTo(RunStore.today()) < 0 ? store.viewAsOf(d) : null;
+                }
+                renderRecords();
+            }
+        });
+        tmBack.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                resetTimeMachine();
+            }
+        });
+        lastScoreVal.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                showScoreBreakdown();
+                return true;
+            }
+        });
+        scoreLatest.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                showScoreBreakdown();
+                return true;
+            }
+        });
+
+        showTab(0);
+        render();
+        if (getIntent() != null) {
+            int ot = getIntent().getIntExtra("open_tab", -1);
+            if (ot >= 0 && ot <= 4) showTab(ot);
+            if (getIntent().getBooleanExtra("tile_start", false)) {
+                showTab(3);
+                if (tState == TS_IDLE) startT();
+            }
+        }
+        SharedPreferences pp = getSharedPreferences("carvo", MODE_PRIVATE);
+        if (Build.VERSION.SDK_INT >= 33 && !pp.getBoolean("tilePermAsked", false)) {
+            pp.edit().putBoolean("tilePermAsked", true).apply();
+            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                toast("Quick Tile needs notification access \u2014 Corvo never sends notifications");
+                requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 11);
+            }
+        }
+        maybeAutoBackup();
+        maybeOnboard();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        uiResumed = true;
+        recoverT();
+        updateWarmup();
+        checkBatteryOpt();
+        CorvoWidget.refresh(this);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        uiResumed = false;
+        stopWarmup();
+        if (toolsUI != null) toolsUI.onTabHidden();
+        if (tHand != null) tHand.removeCallbacks(tTick);
+    }
+
+    @Override
+    protected void onNewIntent(Intent i) {
+        super.onNewIntent(i);
+        setIntent(i);
+        if (i != null) {
+            int ot = i.getIntExtra("open_tab", -1);
+            if (ot >= 0 && ot <= 4) showTab(ot);
+            if (i.getBooleanExtra("tile_start", false)) {
+                showTab(3);
+                if (tState == TS_IDLE) startT();
+            }
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (curTab == 4 && toolsUI != null && toolsUI.handleBack()) {
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_LOC) {
+            boolean locOk = hasLocPerm();
+            if (pendingCroStart) {
+                pendingCroStart = false;
+                if (locOk) {
+                    CroSiteEngine.setEnabled(this, true);
+                    startTNow(true);
+                } else {
+                    CroSiteEngine.setEnabled(this, false);
+                    toast("No location access \u2014 running Timer Only");
+                    startTNow(false);
+                }
+            } else {
+                updateWarmup();
+                renderTimer();
+            }
+        } else if (requestCode == REQ_CAM) {
+            boolean ok = grantResults != null && grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            if (toolsUI != null) toolsUI.onCameraPermResult(ok);
+        }
+    }
+
+    private boolean isAmoled() {
+        return !"classic".equals(prefs.getString("theme", "amoled"));
+    }
+
+    // ================= SETTINGS (GEAR) =================
+
+    private void gearMenu() {
+        StringBuilder restB = new StringBuilder();
+        for (String ds : store.weekRestDates(RunStore.weekMonday(RunStore.today()))) {
+            if (restB.length() > 0) restB.append("+");
+            restB.append(DAY_SHORT[RunStore.dowOf(ds) - 1]);
+        }
+        String rest = restB.length() > 0 ? restB.toString() : "NONE";
+        String th = isAmoled() ? "AMOLED" : "CLASSIC";
+        final String[] items = {
+                "REST DAY   \u00B7   " + rest,
+                "THEME   \u00B7   " + th,
+                "HOW TO USE"
+        };
+        new AlertDialog.Builder(this)
+                .setTitle("SETTINGS")
+                .setItems(items, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        if (w == 0) restDayDialog();
+                        else if (w == 1) themeDialog();
+                        else howToUseDialog();
+                    }
+                }).show();
+    }
+
+    private void howToUseDialog() {
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(20), dp(6), dp(20), dp(14));
+
+        TextView intro = new TextView(this);
+        intro.setText("Every block, hidden tap & engine in Corvo — 100% offline.");
+        intro.setTextSize(11);
+        intro.setTextColor(0xFF8A94A6);
+        list.addView(intro);
+
+        guideSection(list, "HOME TAB");
+        guideItem(list, "CORVO HEADER",
+                "Tap the top CORVO logo anytime to open Corvo's Identity Card & evolution class.");
+        guideItem(list, "THE CROW CARD (THE FILE)",
+                "Tap the large Crow art to open THE FILE — your runner dossier (Name, Height, Weight, BMI, Age, City, Codename, Record, Mood Profile & Strongest Day). Tap any row inside to edit all fields in one place, or share a Dossier PNG.");
+        guideItem(list, "RECOVERY BRAIN",
+                "Tap the recovery strip below the Crow to inspect the 4-bar breakdown (Load, Intensity, Fatigue, Mood). When overloaded, tap REST TODAY to move a rest day to today.");
+        guideItem(list, "SAVE RUN & EDIT",
+                "Tap SAVE RUN to enter KM then MIN + SEC. Tap EDIT anytime to update today's logged run.");
+        guideItem(list, "MOOD CHECK-IN & INSIGHT",
+                "Tap an emoji before and after saving a run. After enough runs, MOOD INSIGHT shows how starting mood shifts your /km pace.");
+        guideItem(list, "RUN SCORE BREAKDOWN",
+                "Long-press the big score number (on Home or BEST) to see the exact weighting: Distance 30% · Pace 40% · Rhythm 20% · Improvement 10%.");
+        guideItem(list, "PINNED RUNS",
+                "Appears automatically on Home whenever you star milestone runs from LOG.");
+
+        guideSection(list, "LOG TAB (HISTORY & BACKUP)");
+        guideItem(list, "SWIPE RIGHT TO PIN",
+                "Swipe any run row to the right to pin or unpin a star onto your Home screen.");
+        guideItem(list, "EXPORT / IMPORT",
+                "Saves or restores one offline corvo-backup.json file (runs, laps, BPM, body profile & Pulse Log). Import merges safely without overwriting existing runs.");
+        guideItem(list, "SHARE POSTERS",
+                "Tap SHARE to generate clean dark PNG cards: RADAR PROFILE, STAT CARD (Week/Month/Year), or DAY CARD (single run + lap chart).");
+
+        guideSection(list, "PLAY TAB (TIMER & CROSITE)");
+        guideItem(list, "RUN vs TIMED MODE",
+                "RUN = open stopwatch with laps. TIMED = goal countdown timer (use - / + to adjust target minutes).");
+        guideItem(list, "CROSITE GPS vs TIMER ONLY",
+                "Choose CROSITE GPS for outdoor runs. Its 3-layer engine blocks standing GPS jitter, calibrates your Stride Bridge, and tracks distance even with the screen locked. On SAVE RUN, CroSite KM pre-fills automatically.");
+        guideItem(list, "LAP & 60s REST",
+                "In RUN mode, tap LAP to close a segment and start a 1-minute rest countdown. CroSite pauses during rest and auto-resumes when rest ends (or tap SKIP REST). Tap UNDO to remove the last lap.");
+        guideItem(list, "POST-RUN BPM PROMPT",
+                "Right after saving a timed run, Corvo offers a 1-tap jump to Camera Pulse to attach recovery heart rate to that run.");
+
+        guideSection(list, "BEST TAB (RECORDS & TIME MACHINE)");
+        guideItem(list, "STREAK BADGES (7 TO 365)",
+                "Tap any circle badge (7, 15, 30, 50, 100, 365) to preview its Crow form and days left to unlock.");
+        guideItem(list, "5-AXIS RADAR",
+                "Maps your long-term Pace, Distance, 30-Day Rhythm, Streak & Avg Score.");
+        guideItem(list, "TIME MACHINE SLIDER",
+                "Drag the bottom dot bar left or right to rewind stats & trends to any past day. Tap BACK TO TODAY to return.");
+
+        guideSection(list, "TOOLS TAB (6 OFFLINE LABS)");
+        guideItem(list, "CAMERA PULSE (PPG BPM)",
+                "Gently place one fingertip over both the rear camera lens and flash for 15s (light touch — don't press hard). Graphs live pulse waves and saves tagged entries (RESTING / POST-RUN / CHECK) to PULSE LOG.");
+        guideItem(list, "STRENGTH LEVEL",
+                "Combines auto Cardio + Resting BPM (pulled from runs & Pulse Log) with manual Pushups, Squats, Pullups & a live Plank timer.");
+        guideItem(list, "BODY & PACE LABS",
+                "BMI, Body Fat %, Pace & Split, and Hydration sync two-way with THE FILE. Tap any slider's big number to type an exact value.");
+
+        guideSection(list, "SETTINGS & HOME WIDGET");
+        guideItem(list, "REST DAYS",
+                "Set up to 2 default weekly rest days or move rest days inside THIS WEEK. Rest days protect your streak; runs logged on rest days still save to History.");
+        guideItem(list, "THEME & WIDGET",
+                "Switch AMOLED / CLASSIC theme here. You can also add Corvo's 1x1 Streak Widget from your phone's launcher widgets screen.");
+
+        android.widget.ScrollView sc = new android.widget.ScrollView(this);
+        sc.addView(list);
+        new AlertDialog.Builder(this)
+                .setTitle("HOW TO USE CORVO")
+                .setView(sc)
+                .setPositiveButton("GOT IT", null)
+                .show();
+    }
+
+    private void guideSection(LinearLayout list, String title) {
+        TextView h = new TextView(this);
+        h.setText(title);
+        h.setTextSize(10);
+        h.setLetterSpacing(0.22f);
+        h.setTextColor(0xFF00E5A0);
+        h.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(16);
+        lp.bottomMargin = dp(4);
+        h.setLayoutParams(lp);
+        list.addView(h);
+    }
+
+    private void guideItem(LinearLayout list, String name, String desc) {
+        TextView t = new TextView(this);
+        t.setText(name);
+        t.setTextSize(12);
+        t.setTextColor(0xFFF2F5FA);
+        t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tlp.topMargin = dp(8);
+        t.setLayoutParams(tlp);
+        list.addView(t);
+
+        TextView d = new TextView(this);
+        d.setText(desc);
+        d.setTextSize(11);
+        d.setTextColor(0xFF8A94A6);
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        dlp.topMargin = dp(2);
+        d.setLayoutParams(dlp);
+        list.addView(d);
+    }
+
+    private void restDayDialog() {
+        final String today = RunStore.today();
+        final java.util.ArrayList<String> sel =
+                new java.util.ArrayList<String>(store.weekRestDates(RunStore.weekMonday(today)));
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(18), dp(8), dp(18), dp(2));
+
+        list.addView(tinyLabel("THIS WEEK", 0));
+        String wd = RunStore.weekMonday(today);
+        for (int i = 0; i < 7; i++) {
+            final String ds = wd;
+            boolean past = ds.compareTo(today) < 0;
+            TextView row = new TextView(this);
+            String txt = DAY_SHORT[RunStore.dowOf(ds) - 1] + "  \u00B7  "
+                    + RunStore.shortDate(ds).toUpperCase(Locale.US);
+            if (ds.equals(today)) txt += "  \u00B7  TODAY";
+            row.setText(txt);
+            row.setTextSize(12);
+            row.setLetterSpacing(0.1f);
+            row.setGravity(Gravity.CENTER);
+            row.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            styleRestPill(row, sel.contains(ds));
+            row.setPadding(0, dp(10), 0, dp(10));
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            rp.setMargins(0, dp(4), 0, dp(4));
+            row.setLayoutParams(rp);
+            if (past) {
+                row.setAlpha(0.45f); // PAST LOCKED — badal nahi sakte
+            } else {
+                row.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        boolean on = sel.contains(ds);
+                        if (!on && sel.size() >= 2) {
+                            toast("MAX 2 REST DAYS PER WEEK");
+                            return;
+                        }
+                        if (on) sel.remove(ds);
+                        else sel.add(ds);
+                        styleRestPill((TextView) v, !on);
+                    }
+                });
+            }
+            list.addView(row);
+            wd = RunStore.dateShift(wd, 1);
+        }
+
+        list.addView(tinyLabel("EVERY WEEK (DEFAULT)", dp(14)));
+        final boolean[] defSel = new boolean[7];
+        int dm = store.restDefaultsMask();
+        LinearLayout chips = new LinearLayout(this);
+        chips.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < 7; i++) {
+            defSel[i] = ((1 << (i + 1)) & dm) != 0;
+            final int idx = i;
+            final TextView chip = new TextView(this);
+            chip.setText(DAY_SHORT[i]);
+            chip.setTextSize(11);
+            chip.setLetterSpacing(0.08f);
+            chip.setGravity(Gravity.CENTER);
+            chip.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            chip.setPadding(0, dp(9), 0, dp(9));
+            styleRestPill(chip, defSel[i]);
+            chip.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (!defSel[idx]) {
+                        int cnt = 0;
+                        for (boolean b : defSel) if (b) cnt++;
+                        if (cnt >= 2) {
+                            toast("MAX 2 DEFAULT DAYS");
+                            return;
+                        }
+                        defSel[idx] = true;
+                    } else {
+                        defSel[idx] = false;
+                    }
+                    styleRestPill(chip, defSel[idx]);
+                }
+            });
+            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            chips.addView(chip, cp);
+        }
+        list.addView(chips);
+
+        TextView note = tinyLabel("MAX 2 PER WEEK \u00B7 PAST DAYS LOCKED \u00B7 MOVES = THIS WEEK ONLY", dp(14));
+        note.setTextSize(9);
+        list.addView(note);
+
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(list);
+        new AlertDialog.Builder(this)
+                .setTitle("REST DAYS")
+                .setView(scroll)
+                .setPositiveButton("SAVE", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        int m = 0;
+                        for (int i = 0; i < 7; i++) if (defSel[i]) m |= (1 << (i + 1));
+                        store.setRestDefaults(m);
+                        store.setRestWeek(sel);
+                        toast("Rest days saved \u2713");
+                        render();
+                    }
+                })
+                .setNegativeButton("CANCEL", null)
+                .show();
+    }
+
+    private void styleRestPill(TextView v, boolean on) {
+        v.setBackgroundResource(on ? R.drawable.badge_on : R.drawable.badge_off);
+        v.setTextColor(on ? 0xFF00E5A0 : 0xFF4A5268);
+    }
+
+    private TextView tinyLabel(String s, int topMarginDp) {
+        TextView t = new TextView(this);
+        t.setText(s);
+        t.setTextSize(10);
+        t.setLetterSpacing(0.2f);
+        t.setTextColor(0xFF8A94A6);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, topMarginDp, 0, dp(6));
+        t.setLayoutParams(lp);
+        return t;
+    }
+
+    // ================= DOST ONBOARDING (sirf Dost builds — first launch identity setup) =================
+
+    private void maybeOnboard() {
+        if (!Flavor.DOST || prefs.getBoolean("onboarded", false)
+                || safeStr("userName").length() > 0) return;
+
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(20), dp(8), dp(20), dp(4));
+
+        TextView t = new TextView(this);
+        t.setText("CORVO IS WATCHING.");
+        t.setGravity(Gravity.CENTER);
+        t.setTextSize(12);
+        t.setLetterSpacing(0.2f);
+        t.setTextColor(0xFF00E5A0);
+        t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        wrap.addView(t);
+
+        TextView m = new TextView(this);
+        m.setText("Set up THE FILE so calories, BMI & CroSite Stride Bridge fit you. Optional fields can be left blank.");
+        m.setGravity(Gravity.CENTER);
+        m.setTextSize(10);
+        m.setLetterSpacing(0.05f);
+        m.setTextColor(0xFF8A94A6);
+        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        mlp.topMargin = dp(6);
+        mlp.bottomMargin = dp(12);
+        m.setLayoutParams(mlp);
+        wrap.addView(m);
+
+        final EditText eName = fileField("NAME (DEFAULT: RUNNER)");
+        eName.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(16)});
+        wrap.addView(eName);
+
+        final EditText eH = fileField("HEIGHT \u00B7 CM (OPTIONAL)");
+        eH.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        wrap.addView(eH);
+
+        final EditText eW = fileField("WEIGHT \u00B7 KG (OPTIONAL)");
+        eW.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        wrap.addView(eW);
+
+        final EditText eDob = fileField("DOB \u00B7 DD-MM-YYYY (OPTIONAL)");
+        eDob.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        attachDobDash(eDob);
+        wrap.addView(eDob);
+
+        final EditText eCity = fileField("CITY (OPTIONAL)");
+        eCity.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(16)});
+        wrap.addView(eCity);
+
+        EditText[] order = {eName, eH, eW, eDob, eCity};
+        for (int i = 0; i < order.length; i++) {
+            order[i].setImeOptions(i == order.length - 1
+                    ? EditorInfo.IME_ACTION_DONE : EditorInfo.IME_ACTION_NEXT);
+        }
+
+        TextView hint = new TextView(this);
+        hint.setText("Tip: Tap the Crow on HOME anytime to open THE FILE, or open Settings \u2192 HOW TO USE.");
+        hint.setGravity(Gravity.CENTER);
+        hint.setTextSize(10);
+        hint.setTextColor(0xFF66708A);
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        hlp.topMargin = dp(10);
+        hint.setLayoutParams(hlp);
+        wrap.addView(hint);
+
+        android.widget.ScrollView sc = new android.widget.ScrollView(this);
+        sc.addView(wrap);
+
+        final AlertDialog dlg = new AlertDialog.Builder(this)
+                .setTitle("WELCOME RUNNER")
+                .setView(sc)
+                .setCancelable(false)
+                .setPositiveButton("BEGIN", null)
+                .create();
+        dlg.show();
+        dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                float h = 0f, wt = 0f;
+                String hs = eH.getText().toString().trim();
+                String ws = eW.getText().toString().trim();
+                try {
+                    if (hs.length() > 0) h = Float.parseFloat(hs);
+                    if (ws.length() > 0) wt = Float.parseFloat(ws);
+                } catch (Exception e) {
+                    toast("Height/Weight: numbers only");
+                    return;
+                }
+                String db = eDob.getText().toString().trim();
+                if (db.length() > 0) {
+                    java.text.SimpleDateFormat f =
+                            new java.text.SimpleDateFormat("dd-MM-yyyy", Locale.US);
+                    f.setLenient(false);
+                    try {
+                        f.parse(db);
+                    } catch (Exception e) {
+                        toast("Check DOB \u00B7 DD-MM-YYYY (or clear it)");
+                        return;
+                    }
+                }
+                String n = eName.getText().toString().trim().toUpperCase(Locale.US);
+                if (n.isEmpty()) n = "RUNNER";
+                String ct = eCity.getText().toString().trim().toUpperCase(Locale.US);
+
+                SharedPreferences.Editor ed = prefs.edit()
+                        .putString("userName", n)
+                        .putBoolean("onboarded", true);
+                if (h > 0f) ed.putFloat("body_h", h);
+                if (wt > 0f) ed.putFloat("body_w", wt);
+                if (db.length() > 0) ed.putString("dob", db);
+                if (ct.length() > 0) ed.putString("city", ct);
+                ed.apply();
+
+                dlg.dismiss();
+                toast("Corvo remembers \u2713");
+                render();
+            }
+        });
+        eName.requestFocus();
+    }
+
+    // ================= RECOVERY BRAIN =================
+
+    private void renderRecovery() {
+        RunStore.Recovery r = store.recovery();
+        int color;
+        String state, msg;
+        if (r.verdict == 4) {
+            color = 0xFF8A94A6;
+            state = "RECOVERY \u00B7 LEARNING";
+            msg = "He is still learning who you are";
+        } else if (r.verdict == 0) {
+            color = 0xFF00E5A0;
+            state = "RECOVERY \u00B7 PRIMED";
+            msg = "Load balanced, mood up \u2014 push day";
+        } else if (r.verdict == 2) {
+            color = 0xFFFFB454;
+            state = "RECOVERY \u00B7 CAUTION";
+            msg = "Body is loaded \u2014 keep today easy and short";
+        } else if (r.verdict == 3) {
+            color = 0xFFFF5C5C;
+            state = "RECOVERY \u00B7 REST CALL";
+            msg = r.spike
+                    ? "Yesterday was big \u2014 rest today, streak stays safe"
+                    : "Body is tired \u2014 rest today, streak stays safe";
+        } else {
+            color = 0xFF8A94A6;
+            state = "RECOVERY \u00B7 STEADY";
+            msg = r.hasData ? "All normal \u2014 regular run" : "Need a few more runs to read you";
+        }
+        android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        gd.setColor(color);
+        recDot.setBackground(gd);
+        recState.setText(state);
+        recState.setTextColor(color);
+        recMsg.setText(msg);
+    }
+
+    private void recoveryDialog() {
+        RunStore.Recovery r = store.recovery();
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(18), dp(8), dp(18), dp(2));
+
+        String[] VN = {"PRIMED", "STEADY", "CAUTION", "REST CALL", "LEARNING"};
+        int[] VC = {0xFF00E5A0, 0xFF8A94A6, 0xFFFFB454, 0xFFFF5C5C, 0xFF8A94A6};
+        TextView vd = new TextView(this);
+        vd.setText(VN[r.verdict]);
+        vd.setTextSize(22);
+        vd.setLetterSpacing(0.18f);
+        vd.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        vd.setTextColor(VC[r.verdict]);
+        list.addView(vd);
+
+        int loadLvl = 0, loadCol = 0xFF8A94A6;
+        String loadNote = "NOT ENOUGH DATA YET";
+        if (r.hasData && r.load > 0) {
+            if (r.load < 0.8) {
+                loadLvl = 3;
+                loadNote = String.format(Locale.US, "LIGHT WEEK \u00B7 %.2fx", r.load);
+            } else if (r.load <= 1.3) {
+                loadLvl = 5;
+                loadCol = 0xFF00E5A0;
+                loadNote = String.format(Locale.US, "BALANCED \u00B7 %.2fx", r.load);
+            } else if (r.load <= 1.5) {
+                loadLvl = 8;
+                loadCol = 0xFFFFB454;
+                loadNote = String.format(Locale.US, "HIGH \u00B7 %.2fx", r.load);
+            } else {
+                loadLvl = 10;
+                loadCol = 0xFFFF5C5C;
+                loadNote = String.format(Locale.US, "OVERLOAD \u00B7 %.2fx", r.load);
+            }
+        }
+        addBar(list, "LOAD", loadLvl, loadCol, loadNote + " \u2014 THIS WEEK VS LAST WEEK");
+
+        int intLvl = 3, intCol = 0xFF00E5A0;
+        String intNote = "STEADY PACE";
+        if (r.hardStreak == 1) {
+            intLvl = 6;
+            intCol = 0xFFFFB454;
+            intNote = "HARD SESSION \u00D71";
+        } else if (r.hardStreak >= 2) {
+            intLvl = 9;
+            intCol = 0xFFFF5C5C;
+            intNote = "HARD SESSIONS \u00D7" + r.hardStreak;
+        }
+        addBar(list, "INTENSITY", intLvl, intCol, intNote + " \u2014 LAST RUN VS 14-DAY PACE");
+
+        int ftgLvl, ftgCol;
+        String ftgNote;
+        if (r.runDays >= 6) {
+            ftgLvl = 10;
+            ftgCol = 0xFFFF5C5C;
+            ftgNote = r.runDays + " RUN DAYS IN A ROW";
+        } else if (r.runDays >= 4) {
+            ftgLvl = 7;
+            ftgCol = 0xFFFFB454;
+            ftgNote = r.runDays + " RUN DAYS IN A ROW";
+        } else if (r.runDays >= 1) {
+            ftgLvl = 4;
+            ftgCol = 0xFF00E5A0;
+            ftgNote = r.runDays + " RUN DAYS IN A ROW";
+        } else {
+            ftgLvl = 0;
+            ftgCol = 0xFF8A94A6;
+            ftgNote = "NO CONSECUTIVE RUNS";
+        }
+        addBar(list, "FATIGUE", ftgLvl, ftgCol, ftgNote);
+
+        int mdLvl = 5, mdCol = 0xFF8A94A6;
+        String mdNote = "STEADY";
+        if (r.moodTrend > 0) {
+            mdLvl = 3;
+            mdCol = 0xFF00E5A0;
+            mdNote = "RISING \u2014 RUNS FEEL GOOD";
+        } else if (r.moodTrend < 0) {
+            mdLvl = 9;
+            mdCol = 0xFFFF5C5C;
+            mdNote = "FALLING \u2014 BODY STRESS SIGNAL";
+        }
+        addBar(list, "MOOD", mdLvl, mdCol, mdNote + " \u2014 BEFORE VS AFTER RUN");
+
+        if (r.verdict == 3) {
+            String today = RunStore.today();
+            if (store.isRestDay(today)) {
+                list.addView(tinyLabel("TODAY IS ALREADY A REST DAY", dp(12)));
+            } else {
+                java.util.ArrayList<String> sel = store.weekRestDates(RunStore.weekMonday(today));
+                boolean fut = false;
+                for (String d : sel) {
+                    if (d.compareTo(today) > 0) fut = true;
+                }
+                if (sel.size() >= 2 && !fut) {
+                    list.addView(tinyLabel("THIS WEEK'S 2 RESTS ARE ALREADY USED", dp(12)));
+                } else {
+                    Button b = new Button(this);
+                    b.setText("REST TODAY");
+                    LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    blp.topMargin = dp(14);
+                    b.setLayoutParams(blp);
+                    b.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            restNow();
+                        }
+                    });
+                    list.addView(b);
+                }
+            }
+        }
+
+        android.widget.ScrollView sc = new android.widget.ScrollView(this);
+        sc.addView(list);
+        new AlertDialog.Builder(this)
+                .setTitle("RECOVERY BRAIN")
+                .setView(sc)
+                .setPositiveButton("CLOSE", null)
+                .show();
+    }
+
+    private void addBar(LinearLayout list, String name, int level, int color, String note) {
+        TextView n = new TextView(this);
+        n.setText(name);
+        n.setTextSize(10);
+        n.setLetterSpacing(0.2f);
+        n.setTextColor(0xFF8A94A6);
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        nlp.topMargin = dp(12);
+        n.setLayoutParams(nlp);
+        list.addView(n);
+        LinearLayout track = new LinearLayout(this);
+        track.setOrientation(LinearLayout.HORIZONTAL);
+        track.setWeightSum(10f);
+        track.setBackgroundResource(R.drawable.badge_off);
+        int lvl = Math.max(0, Math.min(10, level));
+        View fill = new View(this);
+        fill.setBackgroundColor(color);
+        track.addView(fill, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, lvl));
+        View spc = new View(this);
+        track.addView(spc, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 10 - lvl));
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(8));
+        tlp.topMargin = dp(5);
+        track.setLayoutParams(tlp);
+        list.addView(track);
+        TextView t = new TextView(this);
+        t.setText(note);
+        t.setTextSize(9);
+        t.setLetterSpacing(0.12f);
+        t.setTextColor(0xFF66708A);
+        LinearLayout.LayoutParams tlp2 = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tlp2.topMargin = dp(4);
+        t.setLayoutParams(tlp2);
+        list.addView(t);
+    }
+
+    private void restNow() {
+        String today = RunStore.today();
+        if (store.isRestDay(today)) {
+            toast("Today is already a rest day");
+            return;
+        }
+        java.util.ArrayList<String> sel = store.weekRestDates(RunStore.weekMonday(today));
+        java.util.ArrayList<String> ns = new java.util.ArrayList<String>(sel);
+        while (ns.size() >= 2) {
+            String fut = null;
+            for (String d : ns) {
+                if (d.compareTo(today) > 0) { fut = d; break; }
+            }
+            if (fut == null) break;
+            ns.remove(fut);
+        }
+        if (ns.size() >= 2) {
+            toast("This week's 2 rests are already used");
+            return;
+        }
+        if (!ns.contains(today)) ns.add(today);
+        store.setRestWeek(ns);
+        toast("Rest moved to today \u2014 streak safe \u2713");
+        render();
+    }
+
+    // ================= CORVO IDENTITY CARD =================
+
+    private void corvoCardDialog() {
+        int idx = rankIndex(store.currentStreak());
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(20), dp(4), dp(20), dp(8));
+
+        ImageView crow = new ImageView(this);
+        crow.setImageResource(rankArt(idx));
+        crow.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        crow.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(200)));
+        list.addView(crow);
+
+        idRow(list, "NAME", "CORVO");
+        idRow(list, "SPECIES", "CORVUS \u2014 THE RUNNER'S CROW");
+        idRow(list, "CLASS", RANK_NAMES[idx]);
+        idRow(list, "BONDED TO", displayName());
+        idRow(list, "ORIGIN", "BORN IN THE DARK. RAISED BY THE ROAD.");
+        idRow(list, "MISSION", "RUN. REMEMBER. EVOLVE.");
+
+        list.addView(tinyLabel("SKILLS", dp(16)));
+        skillRow(list, "STREAK MEMORY", "Every run is logged. Every kilometre remembered.");
+        skillRow(list, "REST WISDOM", "Two rest moves a week. The streak never breaks.");
+        skillRow(list, "RECOVERY BRAIN", "Reads your load, pace, fatigue and mood \u2014 then speaks.");
+        skillRow(list, "EVOLUTION", "Six forms in 365 days. Couch to Legend.");
+        skillRow(list, "OFFLINE SOUL", "No network. No account. Just you and him.");
+
+        TextView q = new TextView(this);
+        q.setText("RUN HAPPENS IN THE DARK.\nPOWER COMES IN THE DARK.");
+        q.setGravity(Gravity.CENTER);
+        q.setTextSize(11);
+        q.setLetterSpacing(0.15f);
+        q.setTextColor(0xFF00E5A0);
+        q.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams qlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        qlp.topMargin = dp(18);
+        q.setLayoutParams(qlp);
+        list.addView(q);
+
+        TextView w = new TextView(this);
+        w.setText("HE IS WATCHING.");
+        w.setGravity(Gravity.CENTER);
+        w.setTextSize(9);
+        w.setLetterSpacing(0.3f);
+        w.setTextColor(0xFF4A5268);
+        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        wlp.topMargin = dp(6);
+        w.setLayoutParams(wlp);
+        list.addView(w);
+
+        android.widget.ScrollView sc = new android.widget.ScrollView(this);
+        sc.addView(list);
+        new AlertDialog.Builder(this)
+                .setTitle("CORVO \u00B7 IDENTITY")
+                .setView(sc)
+                .setPositiveButton("CLOSE", null)
+                .show();
+    }
+
+    private void idRow(LinearLayout list, String k, String v) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        TextView a = new TextView(this);
+        a.setText(k);
+        a.setTextSize(9);
+        a.setLetterSpacing(0.2f);
+        a.setTextColor(0xFF66708A);
+        a.setWidth(dp(86));
+        TextView b = new TextView(this);
+        b.setText(v);
+        b.setTextSize(12);
+        b.setTextColor(0xFFF2F5FA);
+        b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        row.addView(a);
+        row.addView(b, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(9);
+        row.setLayoutParams(lp);
+        list.addView(row);
+    }
+
+    private void skillRow(LinearLayout list, String k, String v) {
+        TextView a = new TextView(this);
+        a.setText("\u25CF  " + k);
+        a.setTextSize(11);
+        a.setLetterSpacing(0.1f);
+        a.setTextColor(0xFF00E5A0);
+        a.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        alp.topMargin = dp(10);
+        a.setLayoutParams(alp);
+        list.addView(a);
+        TextView b = new TextView(this);
+        b.setText(v);
+        b.setTextSize(10);
+        b.setTextColor(0xFF8A94A6);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        blp.topMargin = dp(2);
+        blp.leftMargin = dp(14);
+        b.setLayoutParams(blp);
+        list.addView(b);
+    }
+
+    // ================= RUNNER FILE — THE FILE (v3.7) =================
+
+    private String displayName() {
+        String n = prefs.getString("userName", "");
+        return n.length() > 0 ? n : "[REDACTED]";
+    }
+
+    private String fileStatus() {
+        RunStore.Recovery r = store.recovery();
+        if (r.verdict == 3) return "RECOVERING";
+        if (r.verdict == 2) return "WATCHED";
+        if (r.verdict == 4) return "LEARNING";
+        return "ACTIVE";
+    }
+
+    /** Crow-given codename — fixed by his order: COLD BLOOD. */
+    private String codename() {
+        return "COLD BLOOD";
+    }
+
+    private LinearLayout fileList; // THE FILE ka live content (null = band)
+
+    private void showFile() {
+        fileList = new LinearLayout(this);
+        fileList.setOrientation(LinearLayout.VERTICAL);
+        fileList.setPadding(dp(20), dp(4), dp(20), dp(8));
+        buildFileRows();
+        android.widget.ScrollView sc = new android.widget.ScrollView(this);
+        sc.addView(fileList);
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setTitle("THE FILE")
+                .setView(sc)
+                .setPositiveButton("CLOSE", null)
+                .create();
+        dlg.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface d) {
+                fileList = null;
+            }
+        });
+        dlg.show();
+    }
+
+    /** THE FILE ka poora content — har save ke baad andar hi rebuild (real-time). */
+    private void buildFileRows() {
+        if (fileList == null) return;
+        fileList.removeAllViews();
+        int idx = rankIndex(store.currentStreak());
+
+        ImageView crow = new ImageView(this);
+        crow.setImageResource(rankArt(idx));
+        crow.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        crow.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(150)));
+        fileList.addView(crow);
+
+        TextView cd = new TextView(this);
+        cd.setText("\u201CCOLD BLOOD\u201D");
+        cd.setGravity(Gravity.CENTER);
+        cd.setTextSize(20);
+        cd.setLetterSpacing(0.12f);
+        cd.setTextColor(0xFF00E5A0);
+        cd.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        fileList.addView(cd);
+        fileList.addView(tinyLabel("CODENAME \u00B7 GIVEN BY THE CROW", dp(2)));
+
+        float bh = safeFloat("body_h"), bw = safeFloat("body_w");
+        String dob = safeStr("dob");
+        String city = safeStr("city");
+        String dobShow = dob.length() > 0
+                ? normalizeDob(dob) + " \u00B7 AGE " + ageFrom(dob) : "REDACTED";
+        idRow(fileList, "NAME", displayName(), "NAME");
+        idRow(fileList, "BODY", bh > 0 && bw > 0
+                ? String.format(Locale.US, "%.0f CM \u00B7 %.0f KG", bh, bw)
+                : "REDACTED", "BODY");
+        if (bh > 0 && bw > 0) {
+            double bmi = bw / Math.pow(bh / 100.0, 2.0);
+            String cat = bmi < 18.5 ? "UNDERWEIGHT" : bmi < 25 ? "NORMAL"
+                    : bmi < 30 ? "OVERWEIGHT" : "OBESE";
+            double lo = 18.5 * Math.pow(bh / 100.0, 2.0), hi = 24.9 * Math.pow(bh / 100.0, 2.0);
+            fileList.addView(tinyLabel(String.format(Locale.US,
+                    "BMI %.1f \u00B7 %s \u00B7 HEALTHY %.0f\u2013%.0f KG", bmi, cat, lo, hi), dp(3)));
+        }
+        idRow(fileList, "DOB", dobShow, "DOB");
+        idRow(fileList, "CITY", city.length() > 0 ? city : "REDACTED", "CITY");
+
+        String first = store.firstRunDate();
+        idRow(fileList, "RANK", RANK_NAMES[idx], null);
+        idRow(fileList, "BONDED SINCE", first != null ? RunStore.pretty(first) : "NOT YET", null);
+        idRow(fileList, "STATUS", fileStatus(), null);
+
+        fileList.addView(tinyLabel("THE RECORD", dp(16)));
+        idRow(fileList, "DISTANCE", String.format(Locale.US, "%.1f KM", store.totalKm()), null);
+        idRow(fileList, "RUNS", String.valueOf(store.count()), null);
+        idRow(fileList, "TIME ON ROAD", String.format(Locale.US, "%.1f HRS", store.totalMin() / 60.0), null);
+        idRow(fileList, "STREAK", store.currentStreak() + " \u00B7 BEST " + store.bestStreak(), null);
+        idRow(fileList, "AVG PACE", store.avgPace() > 0 ? paceText(store.avgPace()) : "\u2014", null);
+        idRow(fileList, "LONGEST RUN", store.longest() > 0
+                ? String.format(Locale.US, "%.2f KM", store.longest()) : "\u2014", null);
+        double fl = store.fastestLapEver();
+        if (fl > 0) idRow(fileList, "FASTEST LAP", clockText(fl), null);
+        int lift = store.moodLiftPct();
+        idRow(fileList, "MOOD PROFILE", lift >= 0
+                ? "MOOD RISES AFTER " + lift + "% OF RUNS" : "NOT ENOUGH DATA", null);
+        String sd = store.strongestDay();
+        idRow(fileList, "STRONGEST DAY", sd != null ? sd : "NOT ENOUGH DATA", null);
+
+        fileList.addView(tinyLabel("TAP A FIELD TO EDIT IT", dp(14)));
+
+        Button share = new Button(this);
+        share.setText("SHARE DOSSIER");
+        share.setBackgroundResource(R.drawable.btn_primary);
+        share.setStateListAnimator(null);
+        share.setTextColor(0xFF07121C);
+        share.setTextSize(13);
+        share.setLetterSpacing(0.12f);
+        share.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(50));
+        slp.topMargin = dp(12);
+        share.setLayoutParams(slp);
+        share.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                shareDossier();
+            }
+        });
+        fileList.addView(share);
+
+        TextView w = new TextView(this);
+        w.setText("HE IS WATCHING.");
+        w.setGravity(Gravity.CENTER);
+        w.setTextSize(9);
+        w.setLetterSpacing(0.3f);
+        w.setTextColor(0xFF4A5268);
+        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        wlp.topMargin = dp(14);
+        w.setLayoutParams(wlp);
+        fileList.addView(w);
+    }
+
+    private void idRow(LinearLayout list, String k, String v, final String focus) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        TextView a = new TextView(this);
+        a.setText(k);
+        a.setTextSize(9);
+        a.setLetterSpacing(0.2f);
+        a.setTextColor(0xFF66708A);
+        a.setWidth(dp(120));
+        TextView b = new TextView(this);
+        b.setText(v);
+        b.setTextSize(12);
+        b.setTextColor(focus != null ? 0xFFF2F5FA : 0xFF8A94A6);
+        b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        row.addView(a);
+        row.addView(b, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(9);
+        row.setLayoutParams(lp);
+        if (focus != null) {
+            row.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v2) {
+                    editFile(focus);
+                }
+            });
+        }
+        list.addView(row);
+    }
+
+    /** Ek hi editor — saare fields, NEXT se travel, ek SAVE. focus = field key. */
+    private void editFile(final String focus) {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(20), dp(4), dp(20), 0);
+
+        final EditText eName = fileField("NAME");
+        eName.setText(safeStr("userName"));
+        eName.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(16)});
+        wrap.addView(eName);
+
+        final EditText eH = fileField("HEIGHT \u00B7 CM");
+        eH.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        eH.setText(safeFloat("body_h") > 0
+                ? String.valueOf((int) safeFloat("body_h")) : "");
+        wrap.addView(eH);
+
+        final EditText eW = fileField("WEIGHT \u00B7 KG");
+        eW.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        eW.setText(safeFloat("body_w") > 0
+                ? String.valueOf((int) safeFloat("body_w")) : "");
+        wrap.addView(eW);
+
+        final EditText eDob = fileField("DOB \u00B7 DD-MM-YYYY");
+        eDob.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        String dob = safeStr("dob");
+        eDob.setText(dob.length() > 0 ? normalizeDob(dob) : "");
+        attachDobDash(eDob);
+        wrap.addView(eDob);
+
+        final EditText eCity = fileField("CITY");
+        eCity.setText(prefs.getString("city", ""));
+        eCity.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(16)});
+        wrap.addView(eCity);
+
+        EditText[] order = {eName, eH, eW, eDob, eCity};
+        for (int i = 0; i < order.length; i++) {
+            order[i].setImeOptions(i == order.length - 1
+                    ? EditorInfo.IME_ACTION_DONE : EditorInfo.IME_ACTION_NEXT);
+        }
+        if ("NAME".equals(focus)) eName.requestFocus();
+        else if ("BODY".equals(focus)) eH.requestFocus();
+        else if ("DOB".equals(focus)) eDob.requestFocus();
+        else if ("CITY".equals(focus)) eCity.requestFocus();
+
+        new AlertDialog.Builder(this)
+                .setTitle("EDIT FILE")
+                .setView(wrap)
+                .setPositiveButton("SAVE", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w2) {
+                        float h = 0f, wt = 0f;
+                        String hs = eH.getText().toString().trim();
+                        String ws = eW.getText().toString().trim();
+                        try {
+                            if (hs.length() > 0) h = Float.parseFloat(hs);
+                            if (ws.length() > 0) wt = Float.parseFloat(ws);
+                        } catch (Exception e) {
+                            toast("Numbers only");
+                            return;
+                        }
+                        String db = eDob.getText().toString().trim();
+                        if (db.length() > 0) {
+                            java.text.SimpleDateFormat f =
+                                    new java.text.SimpleDateFormat("dd-MM-yyyy", Locale.US);
+                            f.setLenient(false);
+                            try {
+                                f.parse(db);
+                            } catch (Exception e) {
+                                toast("Check the date \u00B7 DD-MM-YYYY");
+                                return;
+                            }
+                        }
+                        prefs.edit()
+                                .putString("userName", eName.getText().toString().trim().toUpperCase(Locale.US))
+                                .putFloat("body_h", h)
+                                .putFloat("body_w", wt)
+                                .putString("dob", db)
+                                .putString("city", eCity.getText().toString().trim().toUpperCase(Locale.US))
+                                .apply();
+                        toast("The file is updated \u2713");
+                        if (fileList != null) buildFileRows(); // aankho ke saamne update
+                        render();
+                    }
+                })
+                .setNegativeButton("CANCEL", null)
+                .show();
+    }
+
+    private float safeFloat(String k) {
+        try { return prefs.getFloat(k, 0f); } catch (Exception e) { return 0f; }
+    }
+
+    private String safeStr(String k) {
+        try { return prefs.getString(k, ""); } catch (Exception e) { return ""; }
+    }
+
+    private EditText fileField(String hint) {
+        EditText e = new EditText(this);
+        e.setHint(hint);
+        return e;
+    }
+
+    private void attachDobDash(final EditText eDob) {
+        eDob.addTextChangedListener(new android.text.TextWatcher() {
+            boolean busy = false;
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            public void afterTextChanged(android.text.Editable s) {
+                if (busy) return;
+                busy = true;
+                try {
+                    String raw = s.toString();
+                    int rawSel = eDob.getSelectionEnd();
+                    int curPos = rawSel < 0 ? raw.length() : Math.min(rawSel, raw.length());
+                    int digitsBefore = 0;
+                    for (int i = 0; i < curPos; i++) {
+                        char ch = raw.charAt(i);
+                        if (ch >= '0' && ch <= '9') digitsBefore++;
+                    }
+                    String d = raw.replaceAll("[^0-9]", "");
+                    if (d.length() > 8) d = d.substring(0, 8);
+                    StringBuilder o = new StringBuilder();
+                    for (int i = 0; i < d.length(); i++) {
+                        if (i == 2 || i == 4) o.append('-');
+                        o.append(d.charAt(i));
+                    }
+                    String formatted = o.toString();
+                    if (!formatted.equals(raw)) {
+                        int sel = 0;
+                        if (digitsBefore > 0) {
+                            int seen = 0;
+                            sel = formatted.length();
+                            for (int i = 0; i < formatted.length(); i++) {
+                                char ch = formatted.charAt(i);
+                                if (ch >= '0' && ch <= '9') {
+                                    seen++;
+                                    if (seen == digitsBefore) {
+                                        sel = i + 1;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        eDob.setText(formatted);
+                        eDob.setSelection(Math.max(0, Math.min(sel, formatted.length())));
+                    }
+                } catch (Exception e) { }
+                busy = false;
+            }
+        });
+    }
+
+    /** Purana yyyy-MM-dd naya DD-MM-YYYY me; naya waise hi. */
+    private String normalizeDob(String dob) {
+        if (dob.matches("\\d{4}-\\d{2}-\\d{2}")) {
+            return dob.substring(8, 10) + "-" + dob.substring(5, 7) + "-" + dob.substring(0, 4);
+        }
+        return dob;
+    }
+
+    private int ageFrom(String dob) {
+        try {
+            java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("dd-MM-yyyy", Locale.US);
+            f.setLenient(false);
+            Calendar b = Calendar.getInstance();
+            b.setTime(f.parse(normalizeDob(dob)));
+            Calendar n = Calendar.getInstance();
+            int a = n.get(Calendar.YEAR) - b.get(Calendar.YEAR);
+            if (n.get(Calendar.DAY_OF_YEAR) < b.get(Calendar.DAY_OF_YEAR)) a--;
+            return Math.max(0, a);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    // ================= LIVE TOUCH =================
+
+    private void pressable(final View v) {
+        v.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v2, MotionEvent e) {
+                if (e.getAction() == MotionEvent.ACTION_DOWN) {
+                    v2.animate().scaleX(0.97f).scaleY(0.97f).setDuration(80).start();
+                } else if (e.getAction() == MotionEvent.ACTION_UP
+                        || e.getAction() == MotionEvent.ACTION_CANCEL) {
+                    v2.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
+                }
+                return false;
+            }
+        });
+    }
+
+    private void countUp(final TextView v, final double val, final int dec, final String suffix) {
+        Double last = (Double) v.getTag();
+        if (last != null && last.doubleValue() == val) return;
+        v.setTag(Double.valueOf(val));
+        android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        a.setDuration(450);
+        a.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(android.animation.ValueAnimator an) {
+                float f = (Float) an.getAnimatedValue();
+                if (dec == 0) {
+                    v.setText(String.format(Locale.US, "%d%s", (long) (val * f), suffix));
+                } else {
+                    v.setText(String.format(Locale.US, "%." + dec + "f%s", val * f, suffix));
+                }
+            }
+        });
+        a.start();
+    }
+
+    private void themeDialog() {
+        final String[] items = {"AMOLED   \u00B7   pure black", "CLASSIC   \u00B7   dark blue"};
+        int cur = isAmoled() ? 0 : 1;
+        new AlertDialog.Builder(this)
+                .setTitle("THEME")
+                .setSingleChoiceItems(items, cur, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        prefs.edit().putString("theme", w == 0 ? "amoled" : "classic").apply();
+                        d.dismiss();
+                        recreate();
+                    }
+                }).show();
+    }
+
+    // ================= TABS (5-ICON DOCK) =================
+
+    private void showTab(int i) {
+        curTab = i;
+        homeScroll.setVisibility(i == 0 ? View.VISIBLE : View.GONE);
+        histScroll.setVisibility(i == 1 ? View.VISIBLE : View.GONE);
+        recScroll.setVisibility(i == 2 ? View.VISIBLE : View.GONE);
+        runScroll.setVisibility(i == 3 ? View.VISIBLE : View.GONE);
+        toolsScroll.setVisibility(i == 4 ? View.VISIBLE : View.GONE);
+
+        View[] tabs = {tabHome, tabHistory, tabRecords, tabTools};
+        ImageView[] icons = {icoHome, icoHistory, icoRecords, icoTools};
+        int[] mappedIdx = {0, 1, 2, 4};
+        for (int t = 0; t < tabs.length; t++) {
+            boolean on = mappedIdx[t] == i;
+            tabs[t].setBackgroundResource(on ? R.drawable.tab_active : 0);
+            icons[t].setColorFilter(on ? 0xFF00E5A0 : 0xFF66708A);
+        }
+        boolean runOn = (i == 3);
+        tabRun.setBackgroundResource(runOn ? R.drawable.nav_play_on : R.drawable.nav_play_off);
+        icoRun.setColorFilter(runOn ? 0xFF07121C : 0xFF00E5A0);
+
+        View content = i == 0 ? homeScroll
+                : (i == 1 ? histScroll : (i == 2 ? recScroll : (i == 3 ? runScroll : toolsScroll)));
+        AlphaAnimation a = new AlphaAnimation(0f, 1f);
+        a.setDuration(120L);
+        content.startAnimation(a);
+
+        if (i == 4 && toolsUI != null) toolsUI.render();
+        else if (toolsUI != null) toolsUI.onTabHidden();
+
+        if (i == 3) {
+            renderTimer();
+            updateWarmup();
+            checkBatteryOpt();
+        } else {
+            stopWarmup();
+        }
+    }
+
+    // ================= SAVE RUN FLOW =================
+
+    private void showDistance(final boolean edit, final Double kmValue) {
+        showDistance(edit, kmValue, null);
+    }
+
+    private void showDistance(final boolean edit, final Double kmValue, final Double timeOverride) {
+        View dv = getLayoutInflater().inflate(R.layout.dialog_distance, null);
+        if (timeOverride != null) {
+            TextView dh = (TextView) dv.findViewById(R.id.dlgHelper);
+            dh.setText("TIME " + clockText(timeOverride) + " \u00B7 FROM TIMER");
+        }
+        final EditText et = (EditText) dv.findViewById(R.id.dlgKm);
+        LinearLayout chipRow = (LinearLayout) dv.findViewById(R.id.chipRow);
+        double[] chips = store.recentKm(3);
+        int[] ids = {R.id.chip0, R.id.chip1, R.id.chip2};
+        for (int i = 0; i < 3; i++) {
+            TextView ch = (TextView) dv.findViewById(ids[i]);
+            if (i < chips.length) {
+                final double v = chips[i];
+                ch.setText(fmtKm(v) + " km");
+                ch.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View x) {
+                        et.setText(fmtKm(v));
+                    }
+                });
+            } else {
+                ch.setVisibility(View.GONE);
+            }
+        }
+        if (chips.length == 0) chipRow.setVisibility(View.GONE);
+        if (kmValue != null) {
+            et.setText(fmtKm(kmValue));
+        } else if (edit) {
+            RunStore.Run t = store.get(RunStore.today());
+            if (t != null) et.setText(fmtKm(t.km));
+        }
+        final AlertDialog d = new AlertDialog.Builder(this)
+                .setTitle(timeOverride != null ? "SAVE RUN"
+                        : (edit ? "EDIT DISTANCE" : "DISTANCE"))
+                .setView(dv)
+                .setPositiveButton("NEXT", null)
+                .setNegativeButton("CANCEL", null)
+                .create();
+        d.show();
+        final Runnable next = new Runnable() {
+            @Override
+            public void run() {
+                double km = parseKm(et);
+                if (km <= 0) {
+                    toast("Enter a distance");
+                    return;
+                }
+                if (km > 200) {
+                    toast("That looks off");
+                    return;
+                }
+                d.dismiss();
+                if (timeOverride != null) guardThenCommit(km, timeOverride, true);
+                else showTime(km, edit);
+            }
+        };
+        d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                next.run();
+            }
+        });
+        et.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent e) {
+                if (actionId == EditorInfo.IME_ACTION_NEXT) {
+                    next.run();
+                    return true;
+                }
+                return false;
+            }
+        });
+        et.requestFocus();
+        if (d.getWindow() != null) {
+            d.getWindow().setSoftInputMode(
+                    android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        }
+    }
+
+    private void showTime(final double km, final boolean edit) {
+        View tv = getLayoutInflater().inflate(R.layout.dialog_time, null);
+        final EditText mEt = (EditText) tv.findViewById(R.id.dlgMin);
+        final EditText sEt = (EditText) tv.findViewById(R.id.dlgSec);
+        if (edit) {
+            RunStore.Run t = store.get(RunStore.today());
+            if (t != null) {
+                long totalSec = Math.round(t.min * 60.0);
+                int mi = (int) (totalSec / 60), se = (int) (totalSec % 60);
+                mEt.setText(mi > 0 ? String.valueOf(mi) : "");
+                sEt.setText(se > 0 ? String.valueOf(se) : "");
+            }
+        }
+        sEt.setImeActionLabel("SAVE", EditorInfo.IME_ACTION_DONE);
+        final AlertDialog d = new AlertDialog.Builder(this)
+                .setTitle("TIME")
+                .setView(tv)
+                .setPositiveButton("SAVE", null)
+                .setNeutralButton("BACK", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dd, int w) {
+                        dd.dismiss();
+                        showDistance(true, km);
+                    }
+                })
+                .setNegativeButton("CANCEL", null)
+                .create();
+        d.show();
+        final Runnable save = new Runnable() {
+            @Override
+            public void run() {
+                int mi = parse(mEt), se = parse(sEt);
+                if (mi < 0 || se < 0) {
+                    toast("Numbers only");
+                    return;
+                }
+                if (se >= 60) {
+                    mi += se / 60;
+                    se = se % 60;
+                }
+                double min = mi + se / 60.0;
+                if (min <= 0) {
+                    toast("Enter the time");
+                    return;
+                }
+                if (min > 600) {
+                    toast("That looks off");
+                    return;
+                }
+                d.dismiss();
+                guardThenCommit(km, min, false);
+            }
+        };
+        d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                save.run();
+            }
+        });
+        mEt.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent e) {
+                if (actionId == EditorInfo.IME_ACTION_NEXT) {
+                    sEt.requestFocus();
+                    return true;
+                }
+                return false;
+            }
+        });
+        sEt.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent e) {
+                if (actionId == EditorInfo.IME_ACTION_DONE) {
+                    save.run();
+                    return true;
+                }
+                return false;
+            }
+        });
+        if (edit) sEt.requestFocus();
+        else mEt.requestFocus();
+        if (d.getWindow() != null) {
+            d.getWindow().setSoftInputMode(
+                    android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        }
+    }
+
+    private void commitRun(double km, double min) {
+        boolean firstToday = store.get(RunStore.today()) == null;
+        commitRun(km, min, firstToday);
+    }
+
+    private void commitRun(double km, double min, boolean offerBpm) {
+        store.upsert(RunStore.today(), km, min);
+        resetTimeMachine();
+        InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null && getCurrentFocus() != null) {
+            imm.hideSoftInputFromWindow(getCurrentFocus().getWindowToken(), 0);
+        }
+        ScaleAnimation pu = new ScaleAnimation(1f, 1.06f, 1f, 1.06f,
+                Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
+        pu.setDuration(110);
+        pu.setRepeatCount(1);
+        pu.setRepeatMode(Animation.REVERSE);
+        saveBtn.startAnimation(pu);
+        toast(store.isRestDay(RunStore.today())
+                ? "Saved \u2713 REST DAY RUN \u2014 STREAK +1"
+                : "Saved \u2713 streak safe");
+        render();
+        statPane.post(new Runnable() {
+            @Override
+            public void run() {
+                pulse(statPane);
+            }
+        });
+        if (offerBpm) {
+            promptPostRunBpm();
+        }
+    }
+
+    private void promptPostRunBpm() {
+        new AlertDialog.Builder(this)
+                .setTitle("MEASURE POST-RUN BPM?")
+                .setMessage("Check recovery heart rate now with Camera Pulse (15s).")
+                .setPositiveButton("MEASURE NOW", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        showTab(4);
+                        if (toolsUI != null) toolsUI.openPulsePostRun();
+                    }
+                })
+                .setNegativeButton("LATER", null)
+                .show();
+    }
+
+    // ================= TYPO GUARD =================
+
+    /** Returns a warning string if km/min looks like a typo, else null. */
+    private String typoWarning(double km, double min) {
+        double lo = store.longest();
+        if (lo >= 3 && km > lo * 3) {
+            return String.format(Locale.US,
+                    "%.1f km is over 3\u00D7 your longest run (%.1f km)", km, lo);
+        }
+        if (km >= 1 && min > 0 && min / km < 2.5) {
+            return "That pace is faster than 2:30/km";
+        }
+        return null;
+    }
+
+    private void guardThenCommit(final double km, final double min, final boolean fromTimer) {
+        String warn = typoWarning(km, min);
+        if (warn == null) {
+            if (fromTimer) commitTimerRun(km, min);
+            else commitRun(km, min);
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("DOUBLE-CHECK")
+                .setMessage(warn + ". Save anyway?")
+                .setPositiveButton("SAVE ANYWAY", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        if (fromTimer) commitTimerRun(km, min);
+                        else commitRun(km, min);
+                    }
+                })
+                .setNegativeButton("FIX", null)
+                .show();
+    }
+
+    private static double parseKm(EditText e) {
+        try {
+            String s = e.getText().toString().trim();
+            if (s.length() == 0) return 0;
+            return Double.parseDouble(s);
+        } catch (Exception x) {
+            return -1;
+        }
+    }
+
+    private static int parse(EditText e) {
+        try {
+            String s = e.getText().toString().trim();
+            if (s.length() == 0) return 0;
+            return Integer.parseInt(s);
+        } catch (Exception x) {
+            return -1;
+        }
+    }
+
+    private static String fmtKm(double v) {
+        if (v == Math.floor(v) && !Double.isInfinite(v)) return String.valueOf((long) v);
+        double r2 = Math.round(v * 100.0) / 100.0;
+        if (Math.round(r2 * 10.0) * 10 == Math.round(r2 * 100.0)) {
+            return String.format(Locale.US, "%.1f", r2);
+        }
+        return String.format(Locale.US, "%.2f", r2);
+    }
+
+    private void pulse(View v) {
+        ScaleAnimation s = new ScaleAnimation(1f, 1.03f, 1f, 1.03f,
+                ScaleAnimation.RELATIVE_TO_SELF, 0.5f,
+                ScaleAnimation.RELATIVE_TO_SELF, 0.5f);
+        s.setDuration(180L);
+        s.setRepeatCount(1);
+        s.setRepeatMode(Animation.REVERSE);
+        v.startAnimation(s);
+    }
+
+    private void toast(String s) {
+        Toast.makeText(this, s, Toast.LENGTH_SHORT).show();
+    }
+
+    // ================= RUN TIMER =================
+
+    private long elapsedMs() {
+        return tAccMs + (tState == TS_RUN ? System.currentTimeMillis() - tRunSince : 0L);
+    }
+
+    private long remainMs() {
+        return tTimedMin * 60000L - elapsedMs();
+    }
+
+    private void saveT() {
+        StringBuilder lb = new StringBuilder();
+        for (Long v : lapMs) {
+            if (lb.length() > 0) lb.append(',');
+            lb.append(v);
+        }
+        tprefs.edit().putInt("mode", tMode)
+                .putInt("state", tState)
+                .putInt("timedMin", tTimedMin)
+                .putLong("accMs", tAccMs)
+                .putLong("runSince", tRunSince)
+                .putLong("restUntil", restUntil)
+                .putString("laps", "[" + lb + "]")
+                .apply();
+    }
+
+    private void syncTimerPrefs() {
+        tMode = tprefs.getInt("mode", T_RUN);
+        tState = tprefs.getInt("state", TS_IDLE);
+        tTimedMin = tprefs.getInt("timedMin", 30);
+        tAccMs = tprefs.getLong("accMs", 0L);
+        tRunSince = tprefs.getLong("runSince", 0L);
+        restUntil = tprefs.getLong("restUntil", 0L);
+    }
+
+    private void recoverT() {
+        syncTimerPrefs();
+        if (tState == TS_RUN && tMode == T_TIMED && remainMs() <= 0) {
+            tAccMs = tTimedMin * 60000L;
+            tRunSince = 0L;
+            tState = TS_DONE;
+            saveT();
+            if (CroSiteEngine.isEnabled(this)) {
+                CroSiteService.dispatch(this, CroSiteService.ACT_PAUSE);
+            }
+        }
+        if (tState == TS_REST && System.currentTimeMillis() >= restUntil) {
+            tRunSince = restUntil > 0 ? restUntil : System.currentTimeMillis();
+            tState = TS_RUN;
+            saveT();
+            if (CroSiteEngine.isEnabled(this)) {
+                CroSiteService.dispatch(this, CroSiteService.ACT_RESUME);
+            }
+        }
+        if (tState == TS_RUN && CroSiteEngine.isEnabled(this) && hasLocPerm()) {
+            CroSiteService.dispatch(this, CroSiteService.ACT_RESUME);
+        }
+        renderTimer();
+        startTick();
+    }
+
+    private void startTick() {
+        tHand.removeCallbacks(tTick);
+        if (tState == TS_RUN || tState == TS_REST) tHand.postDelayed(tTick, 250L);
+    }
+
+    private void setMode(int m) {
+        if (tState != TS_IDLE) {
+            toast("Finish or discard this timer first");
+            return;
+        }
+        tMode = m;
+        saveT();
+        renderTimer();
+    }
+
+    private void stepMin(int d) {
+        if (tState != TS_IDLE) return;
+        int v = Math.max(5, Math.min(180, tTimedMin + d));
+        if (v != tTimedMin) {
+            tTimedMin = v;
+            saveT();
+            renderTimer();
+        }
+    }
+
+    private boolean hasLocPerm() {
+        if (Build.VERSION.SDK_INT < 23) return true;
+        return checkSelfPermission("android.permission.ACCESS_FINE_LOCATION")
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void updateWarmup() {
+        if (!uiResumed || curTab != 3 || tState != TS_IDLE
+                || !CroSiteEngine.isEnabled(this) || !hasLocPerm()) {
+            stopWarmup();
+            return;
+        }
+        if (warmingUp || warmLm == null) return;
+        try {
+            if (warmLm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                warmLm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1500L, 0f,
+                        warmListener, Looper.getMainLooper());
+                warmingUp = true;
+            }
+        } catch (SecurityException ignored) {
+        } catch (Exception ignored) {
+        }
+        renderCroSiteUi();
+    }
+
+    private void stopWarmup() {
+        if (!warmingUp || warmLm == null) return;
+        try {
+            warmLm.removeUpdates(warmListener);
+        } catch (Exception ignored) {
+        }
+        warmingUp = false;
+    }
+
+    private void checkBatteryOpt() {
+        if (batWarnCard == null) return;
+        if (Build.VERSION.SDK_INT < 23 || !CroSiteEngine.isEnabled(this)
+                || prefs.getBoolean("bat_dismissed", false)) {
+            batWarnCard.setVisibility(View.GONE);
+            return;
+        }
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        boolean unrestricted = pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
+        batWarnCard.setVisibility(unrestricted ? View.GONE : View.VISIBLE);
+    }
+
+    private void startT() {
+        if (CroSiteEngine.isEnabled(this) && !hasLocPerm()) {
+            pendingCroStart = true;
+            ArrayList<String> perms = new ArrayList<String>();
+            perms.add("android.permission.ACCESS_FINE_LOCATION");
+            perms.add("android.permission.ACCESS_COARSE_LOCATION");
+            if (Build.VERSION.SDK_INT >= 33
+                    && checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                    != PackageManager.PERMISSION_GRANTED) {
+                perms.add("android.permission.POST_NOTIFICATIONS");
+            }
+            toast("Allow location so CroSite tracks distance automatically");
+            requestPermissions(perms.toArray(new String[0]), REQ_LOC);
+            return;
+        }
+        startTNow(CroSiteEngine.isEnabled(this));
+    }
+
+    private void startTNow(boolean withCroSite) {
+        stopWarmup();
+        tAccMs = 0L;
+        tRunSince = System.currentTimeMillis();
+        tState = TS_RUN;
+        saveT();
+        if (withCroSite) {
+            CroSiteService.dispatch(this, CroSiteService.ACT_START);
+        } else {
+            CroSiteEngine.resetAll(this);
+        }
+        renderTimer();
+        startTick();
+    }
+
+    private void pauseT() {
+        if (tState != TS_RUN) return;
+        tAccMs = elapsedMs();
+        tRunSince = 0L;
+        tState = TS_PAUSE;
+        saveT();
+        if (CroSiteEngine.isEnabled(this)) {
+            CroSiteService.dispatch(this, CroSiteService.ACT_PAUSE);
+        }
+        renderTimer();
+        tHand.removeCallbacks(tTick);
+    }
+
+    private void resumeT() {
+        if (tState != TS_PAUSE) return;
+        tRunSince = System.currentTimeMillis();
+        tState = TS_RUN;
+        saveT();
+        if (CroSiteEngine.isEnabled(this)) {
+            CroSiteService.dispatch(this, CroSiteService.ACT_RESUME);
+        }
+        renderTimer();
+        startTick();
+    }
+
+    // ================= LAP (v3.7) — lap is just a lap =================
+
+    private void lapT() {
+        if (tState != TS_RUN || tMode != T_RUN) return;
+        lapMs.add(elapsedMs());
+        tAccMs = elapsedMs();
+        tRunSince = 0L;
+        tState = TS_REST;
+        restUntil = System.currentTimeMillis() + 60000L;
+        saveT();
+        if (CroSiteEngine.isEnabled(this)) {
+            CroSiteService.dispatch(this, CroSiteService.ACT_PAUSE);
+        }
+        renderTimer();
+        startTick();
+        pulse(timerText);
+    }
+
+    private void skipRest() {
+        if (tState != TS_REST) return;
+        tRunSince = System.currentTimeMillis();
+        tState = TS_RUN;
+        saveT();
+        if (CroSiteEngine.isEnabled(this)) {
+            CroSiteService.dispatch(this, CroSiteService.ACT_RESUME);
+        }
+        renderTimer();
+        startTick();
+    }
+
+    private void undoLap() {
+        if (lapMs.isEmpty()) return;
+        lapMs.remove(lapMs.size() - 1);
+        if (tState == TS_REST) {
+            tRunSince = System.currentTimeMillis();
+            tState = TS_RUN;
+            if (CroSiteEngine.isEnabled(this)) {
+                CroSiteService.dispatch(this, CroSiteService.ACT_RESUME);
+            }
+        }
+        saveT();
+        renderTimer();
+    }
+
+    private double[] lapsMinutes() {
+        double[] out = new double[lapMs.size()];
+        long prev = 0L;
+        for (int i = 0; i < lapMs.size(); i++) {
+            out[i] = (lapMs.get(i) - prev) / 60000.0;
+            prev = lapMs.get(i);
+        }
+        return out;
+    }
+
+    private void savePromptT() {
+        if (tState != TS_PAUSE && tState != TS_DONE && tState != TS_REST) return;
+        double min = elapsedMs() / 60000.0;
+        if (min < 0.02) {
+            toast("No time on the timer");
+            return;
+        }
+        pendingLaps = lapsMinutes();
+        Double croKm = null;
+        if (CroSiteEngine.isEnabled(this)) {
+            double ck = CroSiteEngine.readDistKm(this);
+            if (ck >= 0.02) croKm = Math.round(ck * 100.0) / 100.0;
+        }
+        showDistance(false, croKm, min);
+    }
+
+    private void commitTimerRun(double km, double min) {
+        if (min > 600) {
+            toast("Timer looks off \u2014 discard it");
+            return;
+        }
+        double[] laps = pendingLaps;
+        pendingLaps = null;
+        resetT();
+        showTab(0);
+        commitRun(km, min, true);
+        if (laps != null && laps.length > 0) store.setLaps(RunStore.today(), laps);
+    }
+
+    private void discardT() {
+        if (tState != TS_PAUSE && tState != TS_DONE && tState != TS_REST) return;
+        new AlertDialog.Builder(this)
+                .setTitle("DISCARD TIMER?")
+                .setMessage("This time will not be saved.")
+                .setPositiveButton("DISCARD", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        resetT();
+                    }
+                })
+                .setNegativeButton("CANCEL", null)
+                .show();
+    }
+
+    private void resetT() {
+        tState = TS_IDLE;
+        tAccMs = 0L;
+        tRunSince = 0L;
+        restUntil = 0L;
+        lapMs.clear();
+        pendingLaps = null;
+        saveT();
+        CroSiteService.dispatch(this, CroSiteService.ACT_STOP);
+        CroSiteEngine.resetAll(this);
+        updateWarmup();
+        renderTimer();
+        tHand.removeCallbacks(tTick);
+    }
+
+    private void renderTimer() {
+        boolean idle = tState == TS_IDLE;
+        modeRunBtn.setTextColor(tMode == T_RUN ? 0xFF00E5A0 : 0xFF66708A);
+        modeTimedBtn.setTextColor(tMode == T_TIMED ? 0xFF00E5A0 : 0xFF66708A);
+        timedPane.setVisibility(idle && tMode == T_TIMED ? View.VISIBLE : View.GONE);
+        timedMinTxt.setText(String.valueOf(tTimedMin));
+        btnStart.setVisibility(idle ? View.VISIBLE : View.GONE);
+        btnPause.setVisibility(tState == TS_RUN ? View.VISIBLE : View.GONE);
+        boolean savable = tState == TS_PAUSE || tState == TS_DONE || tState == TS_REST;
+        saveResumeRow.setVisibility(savable ? View.VISIBLE : View.GONE);
+        btnResume.setVisibility(tState == TS_PAUSE ? View.VISIBLE : View.GONE);
+        btnDiscard.setVisibility(savable ? View.VISIBLE : View.GONE);
+        if (tMode == T_TIMED) {
+            long ms = idle ? tTimedMin * 60000L : remainMs();
+            timerText.setText(clockText(ms / 60000.0));
+        } else {
+            timerText.setText(clockText(elapsedMs() / 60000.0));
+        }
+        timerText.setTextColor(tState == TS_DONE || tState == TS_REST ? 0xFFFFB454
+                : (tState == TS_RUN ? 0xFF00E5A0 : 0xFFF2F5FA));
+        String hint;
+        if (tState == TS_IDLE) {
+            hint = tMode == T_TIMED ? "COUNTS DOWN TO ZERO" : "STOPWATCH \u00B7 COUNTS UP";
+        } else if (tState == TS_RUN) {
+            hint = "RUNNING \u2014 KEEPS COUNTING IF CLOSED";
+        } else if (tState == TS_PAUSE) {
+            hint = "PAUSED \u2014 SAVE, RESUME OR DISCARD";
+        } else if (tState == TS_REST) {
+            hint = "REST \u00B7 ONE MINUTE WALK BREAK";
+        } else {
+            hint = "TIME'S UP \u2014 SAVE YOUR RUN";
+        }
+        timerHint.setText(hint);
+
+        // LAP row — sirf RUN mode (uska order), TIMED me kabhi nahi
+        lapRow.setVisibility(tMode == T_RUN && !idle ? View.VISIBLE : View.GONE);
+        btnLap.setVisibility(tState == TS_RUN || tState == TS_REST ? View.VISIBLE : View.GONE);
+        btnLap.setText(tState == TS_REST ? "SKIP REST" : "LAP");
+        btnLapUndo.setVisibility(!lapMs.isEmpty() && tState != TS_IDLE ? View.VISIBLE : View.GONE);
+        if (tState == TS_REST) {
+            long left = Math.max(0L, restUntil - System.currentTimeMillis());
+            lapInfo.setText("REST " + clockText(left / 60000.0) + " \u00B7 WALK IT OFF");
+            lapInfo.setVisibility(View.VISIBLE);
+        } else if (!lapMs.isEmpty()) {
+            long last = lapMs.get(lapMs.size() - 1);
+            long prev = lapMs.size() > 1 ? lapMs.get(lapMs.size() - 2) : 0L;
+            lapInfo.setText("LAP " + lapMs.size() + " \u00B7 LAST "
+                    + clockText((last - prev) / 60000.0));
+            lapInfo.setVisibility(View.VISIBLE);
+        } else {
+            lapInfo.setVisibility(View.GONE); // khaali hint line nahi dikhti
+        }
+        renderCroSiteUi();
+    }
+
+    private void renderCroSiteUi() {
+        if (croRow == null) return;
+        boolean en = CroSiteEngine.isEnabled(this);
+        boolean idle = tState == TS_IDLE;
+        croRow.setVisibility(idle ? View.VISIBLE : View.GONE);
+        croOnBtn.setBackgroundResource(en ? R.drawable.badge_on : R.drawable.badge_off);
+        croOnBtn.setTextColor(en ? 0xFF00E5A0 : 0xFF66708A);
+        croOffBtn.setBackgroundResource(!en ? R.drawable.badge_on : R.drawable.badge_off);
+        croOffBtn.setTextColor(!en ? 0xFF00E5A0 : 0xFF66708A);
+
+        int dotColor;
+        String status;
+        if (!en) {
+            dotColor = 0xFF66708A;
+            status = "TIMER ONLY \u00B7 ENTER KM ON SAVE";
+        } else if (idle) {
+            boolean gpsOn = warmLm != null && warmLm.isProviderEnabled(LocationManager.GPS_PROVIDER);
+            if (!gpsOn) {
+                dotColor = 0xFFFFB454;
+                status = "TURN ON PHONE GPS FOR CROSITE";
+            } else if (!hasLocPerm()) {
+                dotColor = 0xFFFFB454;
+                status = "CROSITE \u00B7 GRANTS GPS ON START";
+            } else if (CroSiteEngine.isSatReady(this)) {
+                dotColor = 0xFF00E5A0;
+                int acc = Math.round(CroSiteEngine.lastAccuracy(this));
+                status = "CROSITE READY (\u00B1" + acc + "M)";
+            } else {
+                dotColor = 0xFF00B4D8;
+                status = "LOCKING SATELLITES...";
+            }
+        } else if (tState == TS_REST) {
+            dotColor = 0xFFFFB454;
+            status = "CROSITE PAUSED DURING REST";
+        } else if (tState == TS_PAUSE || tState == TS_DONE) {
+            dotColor = 0xFFFFB454;
+            status = "CROSITE PAUSED";
+        } else {
+            dotColor = CroSiteEngine.isSatReady(this) ? 0xFF00E5A0 : 0xFF00B4D8;
+            status = CroSiteEngine.isSatReady(this)
+                    ? "CROSITE ACTIVE \u00B7 GPS + STRIDE"
+                    : "CROSITE ACTIVE \u00B7 LOCKING GPS...";
+        }
+        GradientDrawable gd = new GradientDrawable();
+        gd.setShape(GradientDrawable.OVAL);
+        gd.setColor(dotColor);
+        croDot.setBackground(gd);
+        croStatusTxt.setText(status);
+        croStatusTxt.setTextColor(dotColor);
+
+        if (en && !idle) {
+            croLiveRow.setVisibility(View.VISIBLE);
+            double km = CroSiteEngine.readDistKm(this);
+            croDistTxt.setText(String.format(Locale.US, "%.2f", km));
+            double elMin = elapsedMs() / 60000.0;
+            if (km >= 0.05 && elMin > 0.1) {
+                long sp = Math.round((elMin / km) * 60.0);
+                croPaceTxt.setText(String.format(Locale.US, "%d:%02d", sp / 60, (int) (sp % 60)));
+            } else {
+                croPaceTxt.setText("\u2014");
+            }
+        } else {
+            croLiveRow.setVisibility(View.GONE);
+        }
+    }
+
+    // ================= RENDER =================
+
+    private void render() {
+        String today = RunStore.today();
+        RunStore.Run t = store.get(today);
+
+        if (t != null) {
+            inputPane.setVisibility(View.GONE);
+            statPane.setVisibility(View.VISIBLE);
+            double speed = t.km / (t.min / 60.0);
+            bigSpeed.setText(String.format(Locale.US, "%.2f", speed));
+            double cal = store.calOf(t);
+            speedTag.setText(tagFor(speed) + (cal > 0
+                    ? " \u00B7 " + String.format(Locale.US, "%.0f CAL", cal) : ""));
+            countUp(miniKm, t.km, 2, " km");
+            miniMin.setText(timeText(t.min));
+            miniPace.setText(String.format(Locale.US, "%.1f min/km", t.min / t.km));
+            renderMoods(t);
+        } else {
+            statPane.setVisibility(View.GONE);
+            inputPane.setVisibility(View.VISIBLE);
+        }
+        boolean restToday = store.isRestDay(today);
+        todayDate.setText(RunStore.pretty(today));
+        restBanner.setVisibility(restToday ? View.VISIBLE : View.GONE);
+
+        bars.setData(store.lastDays(7), RunStore.dayLabels(7), 6);
+
+        renderTrend();
+        renderScore();
+        renderPinned();
+        renderHistory();
+        renderRecords();
+        renderCategory();
+        renderRecovery();
+        setupTimeBar();
+        CorvoWidget.refresh(this);
+    }
+
+    private void renderMoods(final RunStore.Run t) {
+        for (int i = 0; i < 4; i++) {
+            final int idx = i;
+            mPre[i].setText(MOOD_PRE[i]);
+            mPost[i].setText(MOOD_POST[i]);
+            styleMood(mPre[i], t.m1 == idx);
+            styleMood(mPost[i], t.m2 == idx);
+            mPre[i].setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    store.setMood(t.d, 0, t.m1 == idx ? -1 : idx);
+                    render();
+                }
+            });
+            mPost[i].setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    store.setMood(t.d, 1, t.m2 == idx ? -1 : idx);
+                    render();
+                }
+            });
+        }
+    }
+
+    private void styleMood(TextView tv, boolean on) {
+        tv.setBackgroundResource(on ? R.drawable.tab_active : 0);
+        tv.setAlpha(on ? 1f : 0.35f);
+    }
+
+    private void renderTrend() {
+        double[] p = store.lastPaces(14);
+        paceLine.setData(p);
+        if (p.length >= 6) {
+            double recent = (p[p.length - 1] + p[p.length - 2] + p[p.length - 3]) / 3.0;
+            double prior = (p[p.length - 4] + p[p.length - 5] + p[p.length - 6]) / 3.0;
+            int sec = (int) Math.round((prior - recent) * 60.0); // + = improving
+            if (sec >= 3) {
+                trendChip.setText("\u25B2 IMPROVING \u00B7 \u2212" + secText(sec) + "/KM");
+                trendChip.setTextColor(0xFF00E5A0);
+            } else if (sec <= -3) {
+                trendChip.setText("\u25BC SLIPPING \u00B7 +" + secText(-sec) + "/KM");
+                trendChip.setTextColor(0xFFFFB454);
+            } else {
+                trendChip.setText("STEADY");
+                trendChip.setTextColor(0xFF66708A);
+            }
+        } else {
+            trendChip.setText("TRACKING \u00B7 " + p.length + " RUNS");
+            trendChip.setTextColor(0xFF66708A);
+        }
+    }
+
+    private static String secText(int sec) {
+        return String.format(Locale.US, "%d:%02d", sec / 60, sec % 60);
+    }
+
+    private void renderScore() {
+        int s = store.latestScore();
+        lastScoreCard.setVisibility(s > 0 ? View.VISIBLE : View.GONE);
+        if (s > 0) countUp(lastScoreVal, s, 0, "");
+        // mood insight — HOME pe, hamesha aaj ka real data (words, no emoji)
+        int[] mi = store.moodInsight();
+        moodCard.setVisibility(mi == null ? View.GONE : View.VISIBLE);
+        if (mi != null) {
+            moodText.setText("When you start " + MOOD_PRE_WORDS[mi[0]].toLowerCase(Locale.US)
+                    + ", you run " + secText(mi[1]) + "/km "
+                    + (mi[2] == 1 ? "faster" : "slower") + " than usual.");
+        }
+    }
+
+    private void renderPinned() {
+        List<RunStore.Run> pins = store.pinned();
+        pinnedCard.setVisibility(pins.isEmpty() ? View.GONE : View.VISIBLE);
+        pinnedList.removeAllViews();
+        for (RunStore.Run r : pins) {
+            TextView line = new TextView(this);
+            line.setText("\u2B50 " + RunStore.shortDate(r.d) + " \u00B7 " + r.pin
+                    + " \u00B7 " + timeText(r.min));
+            line.setTextSize(12);
+            line.setTextColor(0xFFF2F5FA);
+            line.setPadding(0, dp(6), 0, 0);
+            pinnedList.addView(line);
+        }
+    }
+
+    private int dp(int v) {
+        return (int) (v * getResources().getDisplayMetrics().density);
+    }
+
+    private void renderRecords() {
+        // ---- Time Machine view state (past only) ----
+        RunStore st = store;
+        String anchor = RunStore.today();
+        if (viewDate != null && viewDate.compareTo(RunStore.today()) < 0 && viewStore != null) {
+            anchor = viewDate;
+            st = viewStore;
+        }
+        int cur = st.currentStreakAsOf(anchor);
+        int best = st.bestStreak();
+        double totalKm = st.totalKm();
+        if (st != store) {
+            tmBanner.setText("VIEWING \u00B7 " + RunStore.pretty(viewDate));
+            tmBanner.setVisibility(View.VISIBLE);
+            tmDate.setText(RunStore.shortDate(viewDate));
+            tmBack.setVisibility(View.VISIBLE);
+        } else {
+            tmBanner.setVisibility(View.GONE);
+            tmDate.setText("TODAY");
+            tmBack.setVisibility(View.GONE);
+        }
+        recStreak.setText(String.valueOf(cur));
+        recStreak.setTextColor(0xFFF2F5FA);
+        recBest.setText("BEST " + best);
+        recFlame.clearAnimation();
+        if (cur > 0) {
+            AlphaAnimation blink = new AlphaAnimation(0.35f, 1f);
+            blink.setDuration(650L);
+            blink.setRepeatMode(Animation.REVERSE);
+            blink.setRepeatCount(Animation.INFINITE);
+            recFlame.startAnimation(blink);
+        }
+        recTotal.setText(String.format(Locale.US, "%.1f km", totalKm));
+        recTotal.setTextColor(0xFFF2F5FA);
+        double lo = st.longest();
+        double bp = st.bestPace();
+        double ap = st.avgPace();
+        recLong.setText(lo > 0 ? String.format(Locale.US, "%.2f km", lo) : "\u2014");
+        recPace.setText(bp > 0 ? paceText(bp) : "\u2014");
+        recSpeed.setText(st.bestSpeed() > 0
+                ? String.format(Locale.US, "%.1f km/h", st.bestSpeed()) : "\u2014");
+        recAvgPace.setText(ap > 0 ? paceText(ap) : "\u2014");
+        recAvgSpeed.setText(st.avgSpeed() > 0
+                ? String.format(Locale.US, "%.1f km/h", st.avgSpeed()) : "\u2014");
+
+        // week vs last week (as-of in past mode, real in future mode)
+        String mon = RunStore.weekMonday(anchor);
+        String lastM = RunStore.dateShift(mon, -7);
+        double tK = st.weekKm(mon), lK = st.weekKm(lastM);
+        int tR = st.weekRuns(mon), lR = st.weekRuns(lastM);
+        wkThisKm.setText(String.format(Locale.US, "%.1f km", tK));
+        wkThisRuns.setText(tR + (tR == 1 ? " RUN" : " RUNS"));
+        wkLastKm.setText(String.format(Locale.US, "%.1f km", lK));
+        wkLastRuns.setText(lR + (lR == 1 ? " RUN" : " RUNS"));
+        double dK = tK - lK;
+        int dR = tR - lR;
+        setDelta(wkDkm, dK, "KM");
+        setDelta(wkDr, dR, "RUNS");
+        if (tR == 0) {
+            wkInsight.setText("THIS WEEK IS WAITING FOR ITS FIRST RUN");
+        } else if (lR == 0) {
+            wkInsight.setText("FIRST FULL WEEK \u2014 BENCHMARK SET");
+        } else if (dK >= 1) {
+            wkInsight.setText(String.format(Locale.US, "%.1f KM MORE THAN LAST WEEK", dK));
+        } else if (dK <= -1) {
+            wkInsight.setText(String.format(Locale.US, "%.1f KM BEHIND LAST WEEK", -dK));
+        } else {
+            wkInsight.setText("SAME DISTANCE AS LAST WEEK");
+        }
+
+        // ramp guard: this week vs last week
+        if (lK >= 3) {
+            double ratio = tK / lK;
+            if (ratio >= 1.5) {
+                loadChip.setText(String.format(Locale.US,
+                        "LOAD %.1f\u00D7 LAST WEEK \u00B7 TAPER DOWN", ratio));
+                loadChip.setTextColor(0xFFFFB454);
+                loadChip.setVisibility(View.VISIBLE);
+            } else if (ratio >= 0.8) {
+                loadChip.setText(String.format(Locale.US,
+                        "LOAD %.1f\u00D7 LAST WEEK \u00B7 SWEET SPOT", ratio));
+                loadChip.setTextColor(0xFF00E5A0);
+                loadChip.setVisibility(View.VISIBLE);
+            } else {
+                loadChip.setVisibility(View.GONE);
+            }
+        } else {
+            loadChip.setVisibility(View.GONE);
+        }
+
+        // scores
+        int sl = st.latestScore();
+        scoreLatest.setText(sl > 0 ? String.valueOf(sl) : "\u2014");
+        scoreBest.setText(String.valueOf(st.bestScore()));
+        scoreAvg.setText(String.valueOf(st.avgScore()));
+        scoreStrip.setData(st.lastScores(14));
+
+        // badges
+        int[] th = {7, 15, 30, 50, 100, 365};
+        int[] ids = {R.id.b7, R.id.b15, R.id.b30, R.id.b50, R.id.b100, R.id.b365};
+        for (int i = 0; i < th.length; i++) {
+            TextView t = (TextView) findViewById(ids[i]);
+            boolean on = cur >= th[i];
+            t.setBackgroundResource(on ? R.drawable.badge_on : R.drawable.badge_off);
+            t.setTextColor(on ? 0xFF00E5A0 : 0xFF4A5268);
+            final int thv = th[i];
+            t.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    showRankDialog(thv);
+                }
+            });
+        }
+        int next = 0;
+        for (int v : th) {
+            if (cur < v) {
+                next = v;
+                break;
+            }
+        }
+        recNext.setText(next > 0 ? "NEXT \u00B7 " + next + " DAYS" : "ALL DONE \uD83D\uDD25");
+
+
+        // radar profile (always today's real profile)
+        radar.setData(radarValues());
+    }
+
+    private void setDelta(TextView tv, double d, String unit) {
+        String s;
+        int col;
+        if (d > 0.05) {
+            s = String.format(Locale.US, "+%.1f %s \u25B2", d, unit);
+            col = 0xFF00E5A0;
+        } else if (d < -0.05) {
+            s = String.format(Locale.US, "\u2212%.1f %s \u25BC", -d, unit);
+            col = 0xFFFFB454;
+        } else {
+            s = String.format(Locale.US, "%.1f %s", d, unit);
+            col = 0xFF66708A;
+        }
+        tv.setText(s);
+        tv.setTextColor(col);
+    }
+
+    private void renderHistory() {
+        countUp(histRunsBig, store.count(), 0, "");
+        long lastExp = Math.max(prefs.getLong("lastExport", 0L),
+                prefs.getLong("lastAutoBackup", 0L));
+        if (store.count() >= 3) {
+            if (lastExp == 0L) {
+                backupAge.setText("LAST BACKUP: NEVER");
+                backupAge.setTextColor(0xFF4A5268);
+                backupAge.setVisibility(View.VISIBLE);
+            } else {
+                long days = (System.currentTimeMillis() - lastExp) / 86400000L;
+                if (days >= 8) {
+                    backupAge.setText("LAST BACKUP: " + days
+                            + (days == 1 ? " DAY AGO" : " DAYS AGO"));
+                    backupAge.setTextColor(days >= 30 ? 0xFFFFB454 : 0xFF4A5268);
+                    backupAge.setVisibility(View.VISIBLE);
+                } else {
+                    backupAge.setVisibility(View.GONE);
+                }
+            }
+        } else {
+            backupAge.setVisibility(View.GONE);
+        }
+        histList.removeAllViews();
+        List<RunStore.Run> all = store.recent(Integer.MAX_VALUE);
+        if (all.isEmpty()) {
+            histEmpty.setVisibility(View.VISIBLE);
+            return;
+        }
+        histEmpty.setVisibility(View.GONE);
+
+        LinkedHashMap<String, List<RunStore.Run>> groups =
+                new LinkedHashMap<String, List<RunStore.Run>>();
+        for (RunStore.Run r : all) {
+            String key = r.d.length() >= 7 ? r.d.substring(0, 7) : r.d;
+            List<RunStore.Run> g = groups.get(key);
+            if (g == null) {
+                g = new ArrayList<RunStore.Run>();
+                groups.put(key, g);
+            }
+            g.add(r);
+        }
+        for (Map.Entry<String, List<RunStore.Run>> e : groups.entrySet()) {
+            int cnt = 0;
+            double sum = 0;
+            for (RunStore.Run r : e.getValue()) {
+                cnt++;
+                sum += r.km;
+            }
+            View h = getLayoutInflater().inflate(R.layout.row_month, histList, false);
+            ((TextView) h.findViewById(R.id.mTitle)).setText(RunStore.monthTitle(e.getKey()));
+            ((TextView) h.findViewById(R.id.mStats)).setText(
+                    String.format(Locale.US, "%d runs \u00B7 %.1f km", cnt, sum));
+            histList.addView(h);
+            for (final RunStore.Run r : e.getValue()) {
+                View row = getLayoutInflater().inflate(R.layout.row_run, histList, false);
+                ((TextView) row.findViewById(R.id.rDate)).setText(RunStore.pretty(r.d));
+                row.findViewById(R.id.rRest).setVisibility(
+                        store.isRestDay(r.d) ? View.VISIBLE : View.GONE);
+                ((TextView) row.findViewById(R.id.rKm))
+                        .setText(String.format(Locale.US, "%.2f km", r.km));
+                ((TextView) row.findViewById(R.id.rTime)).setText(timeText(r.min) + calSuffix(r));
+                ((TextView) row.findViewById(R.id.rSpeed))
+                        .setText(String.format(Locale.US, "%.1f", r.km / (r.min / 60.0)));
+                histList.addView(makeSwipeable(r, row));
+            }
+        }
+    }
+
+    private View makeSwipeable(final RunStore.Run r, final View content) {
+        FrameLayout wrap = new FrameLayout(this);
+        wrap.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        final TextView star = new TextView(this);
+        star.setText("\u2B50");
+        star.setTextSize(20);
+        star.setGravity(Gravity.CENTER_VERTICAL);
+        star.setPadding(dp(14), 0, 0, 0);
+        star.setAlpha(0f);
+        wrap.addView(star, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        wrap.addView(content, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT));
+        content.setOnTouchListener(new View.OnTouchListener() {
+            float downX = 0, downY = 0;
+            boolean horiz = false, decided = false;
+
+            @Override
+            public boolean onTouch(View v, MotionEvent e) {
+                switch (e.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        downX = e.getX();
+                        downY = e.getY();
+                        horiz = false;
+                        decided = false;
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        float dx = e.getX() - downX, dy = e.getY() - downY;
+                        if (!decided) {
+                            if (dx > 20 && dx > Math.abs(dy) * 1.2f) {
+                                horiz = true;
+                                decided = true;
+                                if (v.getParent() != null) {
+                                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                                }
+                            } else if (Math.abs(dy) > 20) {
+                                decided = true;
+                            }
+                        }
+                        if (horiz) {
+                            float t = Math.max(0f, Math.min(1f, dx / 160f));
+                            v.setTranslationX(t * 100f);
+                            star.setAlpha(t);
+                            return true;
+                        }
+                        return false;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        if (horiz) {
+                            if (e.getX() - downX > 80f) {
+                                String title = store.togglePin(r.d);
+                                render();
+                                toast(title.length() > 0
+                                        ? "PINNED \u2B50 " + title : "UNPINNED");
+                            }
+                            v.animate().translationX(0).setDuration(150).start();
+                            star.animate().alpha(0).setDuration(150).start();
+                            horiz = false;
+                            return true;
+                        }
+                        return false;
+                }
+                return false;
+            }
+        });
+        return wrap;
+    }
+
+    private String calSuffix(RunStore.Run r) {
+        double cal = store.calOf(r);
+        String c = cal > 0 ? " \u00B7 " + String.format(Locale.US, "%.0f CAL", cal) : "";
+        String b = r.bpm > 0 ? " \u00B7 " + r.bpm + " BPM" : "";
+        return c + b;
+    }
+
+    // ================= CATEGORY (THE CROW) =================
+
+    private static final int[] RANK_TH = {7, 15, 30, 50, 100, 365};
+    private static final String[] RANK_NAMES = {
+            "COUCH", "JOGGER", "RUNNER", "SPRINTER", "BEAST", "LEGEND"
+    };
+
+    /** His mapping: the crow you carry at streak s is the next milestone's form. */
+    private static int rankIndex(int streak) {
+        if (streak < 7) return 0;
+        if (streak < 15) return 1;
+        if (streak < 30) return 2;
+        if (streak < 50) return 3;
+        if (streak < 100) return 4;
+        return 5;
+    }
+
+    private static int rankArt(int idx) {
+        int[] art = {R.drawable.crow_7, R.drawable.crow_15, R.drawable.crow_30,
+                R.drawable.crow_50, R.drawable.crow_100, R.drawable.crow_365};
+        return art[idx];
+    }
+
+    private void renderCategory() {
+        int idx = rankIndex(store.currentStreak());
+        catCrow.setImageResource(rankArt(idx));
+        catRank.setText(RANK_NAMES[idx]);
+    }
+
+    /** Tap a streak badge: see the crow form that streak unlocks. */
+    private void showRankDialog(int th) {
+        int idx = rankIndex(th);
+        int cur = store.currentStreak();
+        View v = getLayoutInflater().inflate(R.layout.dialog_rank, null);
+        ((ImageView) v.findViewById(R.id.rdCrow)).setImageResource(rankArt(idx));
+        ((TextView) v.findViewById(R.id.rdRank)).setText(RANK_NAMES[idx]);
+        ((TextView) v.findViewById(R.id.rdAt)).setText("AT " + th + " DAY STREAK");
+        TextView st = (TextView) v.findViewById(R.id.rdStatus);
+        if (cur >= th) {
+            st.setText("UNLOCKED \u2713");
+            st.setTextColor(0xFF00E5A0);
+        } else {
+            st.setText((th - cur) + " DAYS TO GO");
+            st.setTextColor(0xFFFFB454);
+        }
+        ((TextView) v.findViewById(R.id.rdNext)).setText(idx < 5
+                ? "NEXT FORM \u00B7 " + RANK_NAMES[idx + 1] + " AT " + RANK_TH[idx] + " DAYS"
+                : "FINAL FORM");
+        new AlertDialog.Builder(this)
+                .setView(v)
+                .setPositiveButton("OK", null)
+                .show();
+    }
+
+    /** Weekly silent snapshot — one file, replaced in place. */
+    private void maybeAutoBackup() {
+        if (store.count() < 3 || Build.VERSION.SDK_INT < 29) return;
+        long last = Math.max(prefs.getLong("lastExport", 0L),
+                prefs.getLong("lastAutoBackup", 0L));
+        if (System.currentTimeMillis() - last < 7L * 24 * 60 * 60 * 1000L) return;
+        try {
+            android.net.Uri files = android.provider.MediaStore.Files.getContentUri("external");
+            String sel = MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ? AND "
+                    + MediaStore.MediaColumns.DISPLAY_NAME + " = ?";
+            java.util.ArrayList<android.net.Uri> kill = new java.util.ArrayList<android.net.Uri>();
+            android.database.Cursor c = getContentResolver().query(files,
+                    new String[]{MediaStore.MediaColumns._ID}, sel,
+                    new String[]{"Documents/Corvo%", "corvo-auto.json"}, null);
+            if (c != null) {
+                while (c.moveToNext()) {
+                    kill.add(android.content.ContentUris.withAppendedId(files, c.getLong(0)));
+                }
+                c.close();
+            }
+            for (android.net.Uri u : kill) {
+                try { getContentResolver().delete(u, null, null); } catch (Exception ignored) { }
+            }
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.MediaColumns.DISPLAY_NAME, "corvo-auto.json");
+            cv.put(MediaStore.MediaColumns.MIME_TYPE, "application/json");
+            cv.put(MediaStore.MediaColumns.RELATIVE_PATH, "Documents/Corvo");
+            android.net.Uri uri = getContentResolver().insert(files, cv);
+            if (uri == null) return;
+            OutputStream os = getContentResolver().openOutputStream(uri);
+            os.write(store.toJSON().getBytes("UTF-8"));
+            os.close();
+            prefs.edit().putLong("lastAutoBackup", System.currentTimeMillis()).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    // ================= TIME MACHINE / RADAR / BREAKDOWN =================
+
+    private void resetTimeMachine() {
+        viewDate = null;
+        viewStore = null;
+        if (tmBar != null) tmBar.setSelected(RunStore.epochDay(RunStore.today()));
+        renderRecords();
+    }
+
+    private void setupTimeBar() {
+        List<RunStore.Run> all = store.recent(Integer.MAX_VALUE);
+        if (all.isEmpty() || tmBar == null) return;
+        String first = all.get(all.size() - 1).d;
+        long minD = RunStore.epochDay(first);
+        long todayD = RunStore.epochDay(RunStore.today());
+        tmBar.setRange(minD, todayD, todayD);
+        Map<Long, Float> dots = new HashMap<Long, Float>();
+        double lo = store.longest();
+        for (RunStore.Run r : all) {
+            if (r.km > 0) {
+                dots.put(RunStore.epochDay(r.d), (float) (lo > 0 ? r.km / lo : 0.5));
+            }
+        }
+        tmBar.setDots(dots);
+    }
+
+    private double[] radarValues() {
+        double pace = store.avgPace();
+        double paceV = pace <= 0 ? 0 : clamp01((8.5 - pace) / 4.5);
+        double distV = clamp01(Math.sqrt(store.totalKm() / 500.0));
+        double rhythmV = clamp01(store.runDaysLast30() / 30.0);
+        double streakV = clamp01(store.currentStreak() / 100.0);
+        double scoreV = clamp01(store.avgScore() / 100.0);
+        return new double[]{paceV, distV, rhythmV, streakV, scoreV};
+    }
+
+    private static double clamp01(double v) {
+        return Math.max(0, Math.min(1, v));
+    }
+
+    private void showScoreBreakdown() {
+        String d = store.latestCountedDate();
+        if (d == null) {
+            toast("No runs yet");
+            return;
+        }
+        double[] p = store.scoreParts(d);
+        if (p == null) {
+            toast("No score for this run");
+            return;
+        }
+        String msg = "RUN \u00B7 " + RunStore.pretty(d) + "\n\n"
+                + String.format(Locale.US, "DISTANCE\n%.2f km  (10-run avg %.2f)  \u2192  %d\n\n",
+                        p[4], p[6], (int) p[0])
+                + "PACE\n" + paceText(p[5] / p[4])
+                + (p[7] > 0 ? "  (avg " + paceText(p[7]) + ")" : "")
+                + "  \u2192  " + (int) p[1] + "\n\n"
+                + String.format(Locale.US, "RHYTHM\n%d of 7 days  \u2192  %d\n\n",
+                        (int) p[9], (int) p[2])
+                + "IMPROVEMENT\n"
+                + (p[8] > 0 ? "vs prev " + paceText(p[8]) : "first scored run")
+                + "  \u2192  " + (int) p[3] + "\n\n"
+                + "WEIGHTS \u00B7 DISTANCE 0.3 / PACE 0.4 / RHYTHM 0.2 / IMPROVEMENT 0.1";
+        new AlertDialog.Builder(this)
+                .setTitle("SCORE " + store.scoreOf(d) + " \u00B7 HOW")
+                .setMessage(msg)
+                .setPositiveButton("OK", null)
+                .show();
+    }
+
+    // ================= SHARE WEEK CARD =================
+
+    private Bitmap buildPeriodCard(String sub, double[] paces, double wk, double wm, int wr,
+                                    double bestKm) {
+        int W = 1080, H = 1350;
+        Bitmap bmp = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        c.drawColor(0xFF05070A);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        p.setColor(0xFF1B2230);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(4);
+        c.drawRoundRect(new RectF(24, 24, W - 24, H - 24), 48, 48, p);
+        p.setStyle(Paint.Style.FILL);
+
+        p.setColor(0xFF00E5A0);
+        p.setTextSize(76);
+        p.setFakeBoldText(true);
+        c.drawText("CORVO", 84, 158, p);
+        p.setFakeBoldText(false);
+        p.setColor(0xFF66708A);
+        p.setTextSize(30);
+        c.drawText(sub, 84, 214, p);
+
+        // pace line hero
+        p.setColor(0xFF232C42);
+        p.setStrokeWidth(2);
+        c.drawLine(84, 300, W - 84, 300, p);
+        p.setTextSize(28);
+        p.setColor(0xFF8A94A6);
+        c.drawText("PACE THIS WEEK", 84, 346, p);
+        if (paces.length == 0) {
+            p.setColor(0xFF4A5268);
+            p.setTextSize(40);
+            c.drawText("NO RUNS THIS WEEK", 84, 520, p);
+        } else {
+            double min = Double.MAX_VALUE, max = -Double.MAX_VALUE, sum = 0;
+            for (double v : paces) {
+                min = Math.min(min, v);
+                max = Math.max(max, v);
+                sum += v;
+            }
+            if (max - min < 0.0001) max = min + 1;
+            float x0 = 110, x1 = W - 110, y0 = 400, y1 = 660;
+            float iw = x1 - x0, ih = y1 - y0;
+            double avgV = sum / paces.length;
+            Paint dash = new Paint(Paint.ANTI_ALIAS_FLAG);
+            dash.setColor(0xFF4A5268);
+            dash.setStyle(Paint.Style.STROKE);
+            dash.setStrokeWidth(3);
+            android.graphics.DashPathEffect dp = new android.graphics.DashPathEffect(
+                    new float[]{18, 18}, 0);
+            dash.setPathEffect(dp);
+            float ay = y0 + (float) ((avgV - min) / (max - min)) * ih;
+            c.drawLine(x0, ay, x1, ay, dash);
+            Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
+            line.setColor(0xFF00E5A0);
+            line.setStyle(Paint.Style.STROKE);
+            line.setStrokeWidth(7);
+            line.setStrokeCap(Paint.Cap.ROUND);
+            Paint dot = new Paint(Paint.ANTI_ALIAS_FLAG);
+            dot.setColor(0xFFF2F5FA);
+            int best = 0;
+            for (int i = 1; i < paces.length; i++) {
+                if (paces[i] < paces[best]) best = i;
+            }
+            float[] xs = new float[paces.length], ys = new float[paces.length];
+            for (int i = 0; i < paces.length; i++) {
+                xs[i] = paces.length == 1 ? (x0 + x1) / 2 : x0 + iw * i / (paces.length - 1);
+                ys[i] = y0 + (float) ((paces[i] - min) / (max - min)) * ih;
+            }
+            for (int i = 1; i < paces.length; i++) {
+                c.drawLine(xs[i - 1], ys[i - 1], xs[i], ys[i], line);
+            }
+            for (int i = 0; i < paces.length; i++) {
+                if (i == best) {
+                    dot.setColor(0xFF00E5A0);
+                    c.drawCircle(xs[i], ys[i], 16, dot);
+                    dot.setColor(0xFFF2F5FA);
+                    c.drawCircle(xs[i], ys[i], 9, dot);
+                } else {
+                    c.drawCircle(xs[i], ys[i], 11, dot);
+                }
+            }
+            long bt = Math.round(paces[best] * 60.0);
+            p.setColor(0xFF00E5A0);
+            p.setTextSize(32);
+            p.setFakeBoldText(true);
+            c.drawText(String.format(Locale.US, "BEST %d:%02d /KM",
+                    bt / 60, (int) (bt % 60)), 84, 712, p);
+            p.setFakeBoldText(false);
+        }
+
+        // numbers row
+        String[][] nums = {
+                {String.format(Locale.US, "%.1f", wk), "KM"},
+                {compactTime(wm), "TIME"},
+                {wk > 0 ? paceShort(wm / wk) : "\u2014", "AVG PACE"},
+                {String.valueOf(wr), "RUNS"}
+        };
+        p.setTextSize(52);
+        p.setFakeBoldText(true);
+        p.setColor(0xFFF2F5FA);
+        float colW = (W - 168) / 4f;
+        for (int i = 0; i < 4; i++) {
+            float cx = 84 + colW * i + colW / 2 - p.measureText(nums[i][0]) / 2;
+            c.drawText(nums[i][0], cx, 850, p);
+        }
+        p.setFakeBoldText(false);
+        p.setTextSize(26);
+        p.setColor(0xFF66708A);
+        for (int i = 0; i < 4; i++) {
+            float cx = 84 + colW * i + colW / 2 - p.measureText(nums[i][1]) / 2;
+            c.drawText(nums[i][1], cx, 892, p);
+        }
+
+        // v3.7: streak line OUT (uska order) — NAME block IN (identity se)
+        p.setColor(0xFF00E5A0);
+        p.setTextSize(46);
+        p.setFakeBoldText(true);
+        String nm = displayName();
+        c.drawText(nm, 84, 985, p);
+        p.setFakeBoldText(false);
+        if (bestKm > 0) {
+            p.setColor(0xFF8A94A6);
+            p.setTextSize(28);
+            String br = String.format(Locale.US, "BEST RUN \u00B7 %.1f KM", bestKm);
+            c.drawText(br, 84, 1030, p);
+        }
+
+        // badges
+        int[] th = {7, 15, 30, 50, 100, 365};
+        int cs = store.currentStreak();
+        float r = 38, gap = 122, startX = 84 + r;
+        for (int i = 0; i < th.length; i++) {
+            float cx = startX + gap * i, cy = 1120;
+            boolean on = cs >= th[i];
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(4);
+            p.setColor(on ? 0xFF00E5A0 : 0xFF232C42);
+            c.drawCircle(cx, cy, r, p);
+            p.setStyle(Paint.Style.FILL);
+            p.setTextSize(32);
+            p.setFakeBoldText(true);
+            p.setColor(on ? 0xFF00E5A0 : 0xFF4A5268);
+            String t = String.valueOf(th[i]);
+            c.drawText(t, cx - p.measureText(t) / 2, cy + 11, p);
+            p.setFakeBoldText(false);
+        }
+
+        p.setColor(0xFF4A5268);
+        p.setTextSize(24);
+        String foot = "MADE WITH CORVO";
+        c.drawText(foot, W / 2 - p.measureText(foot) / 2, 1284, p);
+        return bmp;
+    }
+
+    private void shareFlow() {
+        new AlertDialog.Builder(this)
+                .setTitle("SHARE")
+                .setItems(new String[]{"RADAR PROFILE", "STAT CARD", "DAY CARD"},
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface d, int w) {
+                                if (w == 0) shareRadar();
+                                else if (w == 1) pickPeriod();
+                                else pickDay();
+                            }
+                        })
+                .setNegativeButton("CANCEL", null)
+                .show();
+    }
+
+    private void pickPeriod() {
+        final String mon = RunStore.weekMonday(RunStore.today());
+        final String lastM = RunStore.dateShift(mon, -7);
+        final List<String> months = store.monthsWithRuns();
+        final String thisY = RunStore.today().substring(0, 4);
+        final String lastY = String.valueOf(Integer.parseInt(thisY) - 1);
+        final boolean hasLastY = store.yearRuns(lastY) > 0;
+        List<String> labels = new ArrayList<String>();
+        labels.add("THIS WEEK \u00B7 " + RunStore.shortDate(mon)
+                + " \u2013 " + RunStore.shortDate(RunStore.dateShift(mon, 6)));
+        labels.add("LAST WEEK \u00B7 " + RunStore.shortDate(lastM)
+                + " \u2013 " + RunStore.shortDate(RunStore.dateShift(lastM, 6)));
+        for (String ym : months) labels.add(RunStore.monthTitle(ym) + " \u00B7 MONTH");
+        labels.add("THIS YEAR \u00B7 " + thisY);
+        if (hasLastY) labels.add("LAST YEAR \u00B7 " + lastY);
+        new AlertDialog.Builder(this)
+                .setTitle("SHARE WHAT?")
+                .setItems(labels.toArray(new String[0]),
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface d, int w) {
+                                if (w == 0) {
+                                    sharePeriod(RunStore.shortDate(mon) + " \u2013 "
+                                            + RunStore.shortDate(RunStore.dateShift(mon, 6))
+                                            + "  \u00B7  WEEK REPORT",
+                                            store.weekPaces(mon), store.weekKm(mon),
+                                            store.weekMin(mon), store.weekRuns(mon),
+                                            store.bestKmWeek(mon),
+                                            "corvo-week-" + mon + ".png");
+                                } else if (w == 1) {
+                                    sharePeriod(RunStore.shortDate(lastM) + " \u2013 "
+                                            + RunStore.shortDate(RunStore.dateShift(lastM, 6))
+                                            + "  \u00B7  WEEK REPORT",
+                                            store.weekPaces(lastM), store.weekKm(lastM),
+                                            store.weekMin(lastM), store.weekRuns(lastM),
+                                            store.bestKmWeek(lastM),
+                                            "corvo-week-" + lastM + ".png");
+                                } else if (w < 2 + months.size()) {
+                                    String ym = months.get(w - 2);
+                                    sharePeriod(RunStore.monthTitle(ym) + "  \u00B7  MONTH REPORT",
+                                            store.monthPaces(ym), store.monthKm(ym),
+                                            store.monthMin(ym), store.monthRuns(ym),
+                                            store.bestKmMonth(ym),
+                                            "corvo-" + ym + ".png");
+                                } else if (w == 2 + months.size()) {
+                                    sharePeriod(thisY + "  \u00B7  YEAR REPORT",
+                                            store.yearPaces(thisY), store.yearKm(thisY),
+                                            store.yearMin(thisY), store.yearRuns(thisY),
+                                            store.bestKmYear(thisY),
+                                            "corvo-" + thisY + ".png");
+                                } else {
+                                    sharePeriod(lastY + "  \u00B7  YEAR REPORT",
+                                            store.yearPaces(lastY), store.yearKm(lastY),
+                                            store.yearMin(lastY), store.yearRuns(lastY),
+                                            store.bestKmYear(lastY),
+                                            "corvo-" + lastY + ".png");
+                                }
+                            }
+                        })
+                .setNegativeButton("CANCEL", null)
+                .show();
+    }
+
+    private void shareRadar() {
+        try {
+            Bitmap b = buildRadarCard();
+            Uri uri = savePng(b, "corvo-profile-" + RunStore.today() + ".png");
+            Intent s = new Intent(Intent.ACTION_SEND);
+            s.setType("image/png");
+            s.putExtra(Intent.EXTRA_STREAM, uri);
+            s.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(s, "SHARE PROFILE"));
+            toast("Saved to Pictures/Corvo \u2713");
+        } catch (Exception e) {
+            toast("Share failed");
+        }
+    }
+
+    private void sharePeriod(String sub, double[] paces, double wk, double wm, int wr,
+                             double bestKm, String name) {
+        try {
+            Bitmap b = buildPeriodCard(sub, paces, wk, wm, wr, bestKm);
+            Uri uri = savePng(b, name);
+            Intent s = new Intent(Intent.ACTION_SEND);
+            s.setType("image/png");
+            s.putExtra(Intent.EXTRA_STREAM, uri);
+            s.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(s, "SHARE RUN CARD"));
+            toast("Saved to Pictures/Corvo \u2713");
+        } catch (Exception e) {
+            toast("Share failed");
+        }
+    }
+
+    private Uri savePng(Bitmap b, String name) throws Exception {
+        if (Build.VERSION.SDK_INT >= 29) {
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.Images.Media.DISPLAY_NAME, name);
+            cv.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+            cv.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Corvo");
+            Uri uri = getContentResolver().insert(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+            if (uri == null) throw new Exception("no uri");
+            OutputStream os = getContentResolver().openOutputStream(uri);
+            b.compress(Bitmap.CompressFormat.PNG, 100, os);
+            os.close();
+            return uri;
+        }
+        File dir = new File(Environment
+                .getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                + "/Corvo");
+        //noinspection ResultOfMethodCallIgnored
+        dir.mkdirs();
+        File f = new File(dir, name);
+        FileOutputStream fo = new FileOutputStream(f);
+        b.compress(Bitmap.CompressFormat.PNG, 100, fo);
+        fo.close();
+        return Uri.fromFile(f);
+    }
+
+    private Bitmap buildRadarCard() {
+        int W = 1080, H = 1350;
+        Bitmap bmp = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        c.drawColor(0xFF05070A);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        p.setColor(0xFF1B2230);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(4);
+        c.drawRoundRect(new RectF(24, 24, W - 24, H - 24), 48, 48, p);
+        p.setStyle(Paint.Style.FILL);
+
+        p.setColor(0xFF00E5A0);
+        p.setTextSize(76);
+        p.setFakeBoldText(true);
+        c.drawText("CORVO", 84, 158, p);
+        p.setFakeBoldText(false);
+        p.setColor(0xFF66708A);
+        p.setTextSize(30);
+        c.drawText("RUNNER PROFILE \u00B7 " + RunStore.shortDate(RunStore.today()), 84, 214, p);
+
+        RadarView.drawRadar(c, W / 2f, 640, 330, radarValues(), 34, 7);
+
+        p.setTextSize(38);
+        p.setFakeBoldText(true);
+        p.setColor(0xFFF2F5FA);
+        String stats = String.format(Locale.US, "%.1f KM \u00B7 %d DAY STREAK \u00B7 SCORE %d",
+                store.totalKm(), store.currentStreak(), store.avgScore());
+        c.drawText(stats, W / 2 - p.measureText(stats) / 2, 1075, p);
+
+        p.setColor(0xFF00E5A0);
+        p.setTextSize(84);
+        p.setLetterSpacing(0.25f);
+        String nm = displayName();
+        c.drawText(nm, W / 2 - p.measureText(nm) / 2, 1195, p);
+        p.setLetterSpacing(0f);
+        p.setFakeBoldText(false);
+
+        p.setColor(0xFF4A5268);
+        p.setTextSize(24);
+        String foot = "MADE WITH CORVO";
+        c.drawText(foot, W / 2 - p.measureText(foot) / 2, 1284, p);
+        return bmp;
+    }
+
+    // ================= DAY CARD + DOSSIER (v3.7) =================
+
+    private void pickDay() {
+        List<RunStore.Run> rec = store.recent(20);
+        if (rec.isEmpty()) {
+            toast("No runs yet");
+            return;
+        }
+        final List<RunStore.Run> fr = rec;
+        String[] labels = new String[fr.size()];
+        for (int i = 0; i < fr.size(); i++) {
+            RunStore.Run r = fr.get(i);
+            labels[i] = RunStore.pretty(r.d) + " \u00B7 " + fmtKm(r.km) + " KM"
+                    + (r.laps != null ? " \u00B7 " + r.laps.length + " LAPS" : "");
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("WHICH DAY?")
+                .setItems(labels, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        shareDayCard(fr.get(w).d);
+                    }
+                })
+                .setNegativeButton("CANCEL", null)
+                .show();
+    }
+
+    private void shareDayCard(String d) {
+        try {
+            Bitmap b = buildDayCard(d);
+            Uri uri = savePng(b, "corvo-day-" + d + ".png");
+            Intent s = new Intent(Intent.ACTION_SEND);
+            s.setType("image/png");
+            s.putExtra(Intent.EXTRA_STREAM, uri);
+            s.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(s, "SHARE DAY CARD"));
+            toast("Saved to Pictures/Corvo \u2713");
+        } catch (Exception e) {
+            toast("Share failed");
+        }
+    }
+
+    private void shareDossier() {
+        try {
+            Bitmap b = buildDossierCard();
+            Uri uri = savePng(b, "corvo-dossier-" + RunStore.today() + ".png");
+            Intent s = new Intent(Intent.ACTION_SEND);
+            s.setType("image/png");
+            s.putExtra(Intent.EXTRA_STREAM, uri);
+            s.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(s, "SHARE DOSSIER"));
+            toast("Saved to Pictures/Corvo \u2713");
+        } catch (Exception e) {
+            toast("Share failed");
+        }
+    }
+
+    private Bitmap buildDayCard(String d) {
+        RunStore.Run r = store.get(d);
+        int W = 1080, H = 1350;
+        Bitmap bmp = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        c.drawColor(0xFF05070A);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setColor(0xFF1B2230);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(4);
+        c.drawRoundRect(new RectF(24, 24, W - 24, H - 24), 48, 48, p);
+        p.setStyle(Paint.Style.FILL);
+
+        p.setColor(0xFF00E5A0);
+        p.setTextSize(76);
+        p.setFakeBoldText(true);
+        c.drawText("CORVO", 84, 158, p);
+        p.setFakeBoldText(false);
+        p.setColor(0xFF66708A);
+        p.setTextSize(30);
+        int runNo = 0;
+        for (RunStore.Run x : store.recent(Integer.MAX_VALUE)) {
+            if (x.d.compareTo(d) <= 0) runNo++;
+        }
+        c.drawText("DAY REPORT \u00B7 RUN #" + runNo, 84, 214, p);
+
+        p.setColor(0xFF00E5A0);
+        p.setTextSize(46);
+        p.setFakeBoldText(true);
+        c.drawText(displayName(), 84, 284, p);
+        p.setFakeBoldText(false);
+
+        p.setColor(0xFF232C42);
+        p.setStrokeWidth(2);
+        c.drawLine(84, 326, W - 84, 326, p);
+        p.setStrokeWidth(0);
+
+        // hero KM — overlap-safe: measure at draw size, phir label
+        p.setTextSize(130);
+        p.setFakeBoldText(true);
+        p.setColor(0xFFF2F5FA);
+        String kmS = String.format(Locale.US, "%.2f", r.km);
+        c.drawText(kmS, 84, 480, p);
+        float kmW = measure(p, kmS);
+        p.setTextSize(30);
+        p.setFakeBoldText(false);
+        p.setColor(0xFF8A94A6);
+        c.drawText("KM", 84 + kmW + 22, 480, p);
+
+        // stat row: TIME / PACE / CAL / SCORE
+        double cal = store.calOf(r);
+        int score = store.scoreOf(d);
+        String[][] nums = {
+                {timeText(r.min), "TIME"},
+                {paceShort(r.min / r.km), "PACE /KM"},
+                {cal > 0 ? String.format(Locale.US, "%.0f", cal) : "\u2014", "CAL (EST)"},
+                {score > 0 ? String.valueOf(score) : "\u2014", "RUN SCORE"}
+        };
+        p.setTextSize(46);
+        p.setFakeBoldText(true);
+        p.setColor(0xFFF2F5FA);
+        float colW = (W - 168) / 4f;
+        for (int i = 0; i < 4; i++) {
+            float cx = 84 + colW * i + colW / 2 - measure(p, nums[i][0]) / 2;
+            c.drawText(nums[i][0], cx, 580, p);
+        }
+        p.setFakeBoldText(false);
+        p.setTextSize(24);
+        p.setColor(0xFF66708A);
+        for (int i = 0; i < 4; i++) {
+            float cx = 84 + colW * i + colW / 2 - measure(p, nums[i][1]) / 2;
+            c.drawText(nums[i][1], cx, 618, p);
+        }
+
+        // context rows — BODY (weight + BMI), avg speed, city, mood (words), rest
+        int yy = 672;
+        p.setTextSize(28);
+        float bh = safeFloat("body_h"), bw = safeFloat("body_w");
+        if (bh > 0 && bw > 0) {
+            double bmi = bw / ((bh / 100.0) * (bh / 100.0));
+            p.setColor(0xFF8A94A6);
+            c.drawText(String.format(Locale.US, "BODY %.0f CM \u00B7 %.0f KG \u00B7 BMI %.1f",
+                    bh, bw, bmi), 84, yy, p);
+            yy += 46;
+        }
+        p.setColor(0xFF8A94A6);
+        c.drawText(String.format(Locale.US, "AVG SPEED %.1f KM/H", r.km / (r.min / 60.0)), 84, yy, p);
+        yy += 46;
+        String city = safeStr("city");
+        if (city.length() > 0) {
+            c.drawText("IN " + city, 84, yy, p);
+            yy += 46;
+        }
+        if (r.m1 >= 0 || r.m2 >= 0) {
+            String mood = "FELT " + (r.m1 >= 0 ? MOOD_PRE_WORDS[r.m1] : "\u2014")
+                    + " \u2192 " + (r.m2 >= 0 ? MOOD_POST_WORDS[r.m2] : "\u2014");
+            c.drawText(mood, 84, yy, p);
+            yy += 46;
+        }
+        if (store.isRestDay(d)) {
+            p.setColor(0xFFFFB454);
+            c.drawText("REST DAY RUN \u00B7 STREAK +1", 84, yy, p);
+            yy += 46;
+        }
+
+        // laps — content ke saath flow
+        if (r.laps != null && r.laps.length > 0) {
+            p.setTextSize(24);
+            p.setColor(0xFF8A94A6);
+            c.drawText("LAPS", 84, yy + 10, p);
+            p.setTextSize(38);
+            p.setFakeBoldText(true);
+            StringBuilder sb = new StringBuilder();
+            double fastest = Double.MAX_VALUE;
+            for (double v : r.laps) fastest = Math.min(fastest, v);
+            for (int i = 0; i < r.laps.length; i++) {
+                if (i > 0) sb.append(" \u00B7 ");
+                sb.append(clockText(r.laps[i]));
+            }
+            p.setColor(0xFFF2F5FA);
+            c.drawText(sb.toString(), 84, yy + 56, p);
+            p.setFakeBoldText(false);
+            p.setTextSize(30);
+            p.setColor(0xFF00E5A0);
+            p.setFakeBoldText(true);
+            String fs = "FASTEST LAP " + clockText(fastest);
+            c.drawText(fs, 84, yy + 102, p);
+            int half = r.laps.length / 2;
+            double firstH = 0, secondH = 0;
+            for (int i = 0; i < r.laps.length; i++) {
+                if (i < half) firstH += r.laps[i]; else secondH += r.laps[i];
+            }
+            if (half > 0 && secondH < firstH) {
+                c.drawText("NEGATIVE SPLIT \u00B7 2ND HALF FASTER", 84 + measure(p, fs) + 30, yy + 102, p);
+            }
+            p.setFakeBoldText(false);
+            yy += 148;
+        }
+
+        // pace trend — week line, ye din highlighted; slot aligned (zyada content ho to hi neeche)
+        String mon = RunStore.weekMonday(d);
+        double[] paces = store.weekPaces(mon);
+        int hi = 0;
+        String dd = mon;
+        while (dd.compareTo(d) < 0) {
+            RunStore.Run x = store.get(dd);
+            if (x != null && x.km > 0) hi++;
+            dd = RunStore.dateShift(dd, 1);
+        }
+        if (paces.length > 0) {
+            double mn = Double.MAX_VALUE, mx = -Double.MAX_VALUE, sum = 0;
+            for (double v : paces) { mn = Math.min(mn, v); mx = Math.max(mx, v); sum += v; }
+            if (mx - mn < 0.0001) mx = mn + 1;
+            if (hi >= paces.length) hi = paces.length - 1;
+            int gy = Math.min(Math.max(yy + 40, 1006), 1090);
+            p.setTextSize(26);
+            p.setColor(0xFF8A94A6);
+            c.drawText("PACE THIS WEEK \u00B7 THIS DAY HIGHLIGHTED", 84, gy, p);
+            float x0 = 110, x1 = W - 110, y0 = gy + 30, y1 = gy + 160;
+            float iw = x1 - x0, ih = y1 - y0;
+            double avgV = sum / paces.length;
+            Paint dash = new Paint(Paint.ANTI_ALIAS_FLAG);
+            dash.setColor(0xFF4A5268);
+            dash.setStyle(Paint.Style.STROKE);
+            dash.setStrokeWidth(3);
+            dash.setPathEffect(new android.graphics.DashPathEffect(new float[]{18, 18}, 0));
+            float ay = y0 + (float) ((avgV - mn) / (mx - mn)) * ih;
+            c.drawLine(x0, ay, x1, ay, dash);
+            Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
+            line.setColor(0xFF00E5A0);
+            line.setStyle(Paint.Style.STROKE);
+            line.setStrokeWidth(7);
+            line.setStrokeCap(Paint.Cap.ROUND);
+            Paint dot = new Paint(Paint.ANTI_ALIAS_FLAG);
+            float[] xs = new float[paces.length], ys = new float[paces.length];
+            for (int i = 0; i < paces.length; i++) {
+                xs[i] = paces.length == 1 ? (x0 + x1) / 2 : x0 + iw * i / (paces.length - 1);
+                ys[i] = y0 + (float) ((paces[i] - mn) / (mx - mn)) * ih;
+            }
+            for (int i = 1; i < paces.length; i++) c.drawLine(xs[i - 1], ys[i - 1], xs[i], ys[i], line);
+            for (int i = 0; i < paces.length; i++) {
+                if (i == hi) {
+                    dot.setColor(0xFF00E5A0);
+                    c.drawCircle(xs[i], ys[i], 18, dot);
+                    dot.setColor(0xFFF2F5FA);
+                    c.drawCircle(xs[i], ys[i], 10, dot);
+                } else {
+                    dot.setColor(0xFFF2F5FA);
+                    c.drawCircle(xs[i], ys[i], 10, dot);
+                }
+            }
+        }
+
+        p.setColor(0xFF4A5268);
+        p.setTextSize(24);
+        String foot = "MADE WITH CORVO";
+        c.drawText(foot, W / 2f - measure(p, foot) / 2, 1284, p);
+        return bmp;
+    }
+
+    private float measure(Paint p, String s) {
+        return p.measureText(s);
+    }
+
+    private Bitmap buildDossierCard() {
+        int W = 1080, H = 1350;
+        Bitmap bmp = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        c.drawColor(0xFF05070A);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setColor(0xFF1B2230);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(4);
+        c.drawRoundRect(new RectF(24, 24, W - 24, H - 24), 48, 48, p);
+        p.setStyle(Paint.Style.FILL);
+
+        p.setColor(0xFF00E5A0);
+        p.setTextSize(76);
+        p.setFakeBoldText(true);
+        c.drawText("CORVO", 84, 158, p);
+        p.setFakeBoldText(false);
+        p.setColor(0xFF66708A);
+        p.setTextSize(30);
+        c.drawText("RUNNER DOSSIER \u00B7 " + RunStore.shortDate(RunStore.today()), 84, 214, p);
+
+        // current crow (rank art)
+        int idx = rankIndex(store.currentStreak());
+        android.graphics.drawable.BitmapDrawable bd =
+                (android.graphics.drawable.BitmapDrawable) getResources().getDrawable(rankArt(idx));
+        android.graphics.Bitmap cb = bd.getBitmap();
+        int maxW = 300, maxH = 260;
+        float sc = Math.min((float) maxW / cb.getWidth(), (float) maxH / cb.getHeight());
+        int dw = Math.round(cb.getWidth() * sc), dh = Math.round(cb.getHeight() * sc);
+        int cx = W / 2, cy = 380;
+        android.graphics.Rect dst = new android.graphics.Rect(
+                cx - dw / 2, cy - dh / 2, cx + dw / 2, cy + dh / 2);
+        c.drawBitmap(cb, null, dst, p);
+
+        p.setColor(0xFF00E5A0);
+        p.setTextSize(54);
+        p.setFakeBoldText(true);
+        p.setLetterSpacing(0.15f);
+        String cn = codename();
+        c.drawText(cn, W / 2f - measure(p, cn) / 2, 588, p);
+        p.setLetterSpacing(0f);
+        p.setFakeBoldText(false);
+        p.setColor(0xFF66708A);
+        p.setTextSize(22);
+        String cl = "CODENAME \u00B7 GIVEN BY THE CROW";
+        c.drawText(cl, W / 2f - measure(p, cl) / 2, 624, p);
+
+        p.setColor(0xFF232C42);
+        p.setStrokeWidth(2);
+        c.drawLine(84, 662, W - 84, 662, p);
+        p.setStrokeWidth(0);
+
+        float bh = safeFloat("body_h"), bw = safeFloat("body_w");
+        String city = safeStr("city");
+        String first = store.firstRunDate();
+        String[][] rows = {
+                {"SUBJECT", displayName()},
+                {"RANK", RANK_NAMES[idx]},
+                {"BONDED SINCE", first != null ? RunStore.shortDate(first) : "\u2014"},
+                {"CITY", city.length() > 0 ? city : "\u2014"},
+                {"BODY", bh > 0 && bw > 0
+                        ? String.format(Locale.US, "%.0f CM \u00B7 %.0f KG", bh, bw) : "\u2014"},
+                {"STATUS", fileStatus()}
+        };
+        int y = 726;
+        for (String[] row : rows) {
+            p.setColor(0xFF66708A);
+            p.setTextSize(26);
+            c.drawText(row[0], 84, y, p);
+            p.setColor(0xFFF2F5FA);
+            p.setTextSize(40);
+            p.setFakeBoldText(true);
+            c.drawText(row[1], 460, y, p);
+            p.setFakeBoldText(false);
+            y += 64;
+        }
+
+        p.setColor(0xFF00E5A0);
+        p.setTextSize(28);
+        p.setFakeBoldText(true);
+        c.drawText("THE RECORD", 84, y + 8, p);
+        p.setFakeBoldText(false);
+        p.setColor(0xFFF2F5FA);
+        p.setTextSize(40);
+        p.setFakeBoldText(true);
+        String rec = String.format(Locale.US, "%.1f KM \u00B7 %d RUNS \u00B7 %.1f HRS",
+                store.totalKm(), store.count(), store.totalMin() / 60.0);
+        c.drawText(rec, W / 2f - measure(p, rec) / 2, y + 68, p);
+        String st = "STREAK " + store.currentStreak() + " \u00B7 BEST " + store.bestStreak();
+        c.drawText(st, W / 2f - measure(p, st) / 2, y + 124, p);
+        p.setFakeBoldText(false);
+
+        p.setColor(0xFF4A5268);
+        p.setTextSize(24);
+        String foot = "HE IS WATCHING \u00B7 MADE WITH CORVO";
+        c.drawText(foot, W / 2f - measure(p, foot) / 2, 1284, p);
+        return bmp;
+    }
+
+    // ================= EXPORT / IMPORT =================
+
+    private void doExport() {
+        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("application/json");
+        i.putExtra(Intent.EXTRA_TITLE, "corvo-backup.json");
+        startActivityForResult(i, REQ_EXPORT);
+    }
+
+    private void doImport() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        startActivityForResult(i, REQ_IMPORT);
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        super.onActivityResult(req, res, data);
+        if (res != RESULT_OK || data == null || data.getData() == null) return;
+        Uri u = data.getData();
+        if (req == REQ_EXPORT) {
+            OutputStream os = null;
+            try {
+                os = getContentResolver().openOutputStream(u);
+                os.write(store.toJSON().getBytes(StandardCharsets.UTF_8));
+                os.flush();
+                prefs.edit().putLong("lastExport", System.currentTimeMillis()).apply();
+                toast("Exported \u2713");
+            } catch (Exception e) {
+                toast("Export failed");
+            } finally {
+                try {
+                    if (os != null) os.close();
+                } catch (Exception ignored) {
+                }
+            }
+        } else if (req == REQ_IMPORT) {
+            InputStream is = null;
+            try {
+                is = getContentResolver().openInputStream(u);
+                ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                byte[] b = new byte[4096];
+                int n;
+                while ((n = is.read(b)) > 0) bo.write(b, 0, n);
+                String json = new String(bo.toByteArray(), StandardCharsets.UTF_8);
+                int c = store.importMerge(json);
+                toast(c > 0 ? "Imported " + c + " runs \u2713" : "Nothing to import");
+                resetTimeMachine();
+                render();
+            } catch (Exception e) {
+                toast("Import failed");
+            } finally {
+                try {
+                    if (is != null) is.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    // ================= HELPERS =================
+
+    private static String timeText(double min) {
+        long totalSec = Math.round(min * 60.0);
+        long h = totalSec / 3600;
+        long m = (totalSec % 3600) / 60;
+        long s = totalSec % 60;
+        if (h > 0) {
+            if (s > 0) return String.format(Locale.US, "%dh %02dm %02ds", h, m, s);
+            return String.format(Locale.US, "%dh %02dm", h, m);
+        }
+        if (s > 0) return String.format(Locale.US, "%dm %02ds", m, s);
+        return m + "m";
+    }
+
+    private static String paceText(double minPerKm) {
+        long totalSec = Math.round(minPerKm * 60.0);
+        return String.format(Locale.US, "%d:%02d /km", totalSec / 60, totalSec % 60);
+    }
+
+    private static String clockText(double min) {
+        long totalSec = Math.max(0, Math.round(min * 60.0));
+        long h = totalSec / 3600, m = (totalSec % 3600) / 60, s = totalSec % 60;
+        if (h > 0) return String.format(Locale.US, "%d:%02d:%02d", h, m, s);
+        return String.format(Locale.US, "%02d:%02d", m, s);
+    }
+
+    private static String compactTime(double min) {
+        long totalSec = Math.round(min * 60.0);
+        long h = totalSec / 3600, m = (totalSec % 3600) / 60;
+        if (h > 0) return String.format(Locale.US, "%dh %02dm", h, m);
+        return String.format(Locale.US, "%02d:%02d", m, totalSec % 60);
+    }
+
+    private static String paceShort(double minPerKm) {
+        long totalSec = Math.round(minPerKm * 60.0);
+        return String.format(Locale.US, "%d:%02d", totalSec / 60, totalSec % 60);
+    }
+
+    private static String tagFor(double speed) {
+        if (speed < 7) return "EASY DAY";
+        if (speed < 9) return "STEADY";
+        if (speed < 11) return "STRONG";
+        if (speed < 13) return "FAST";
+        return "BEAST MODE";
+    }
+}
