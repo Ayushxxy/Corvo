@@ -35,7 +35,7 @@ Most fitness apps are **150–300 MB**, force logins and cloud sync, charge subs
 
 ---
 
-## Real App Screenshots
+## Screenshots
 
 ### Core Experience — Home, CroSite Timer, Camera Pulse & Tools
 | Home & Recovery | CroSite Timer & Rest | Camera Pulse PPG | Tools (6 Engines) |
