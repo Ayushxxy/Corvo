@@ -1,0 +1,3 @@
+- Built-in HOW TO USE offline guide in Settings covering all hidden triggers and gestures
+- Expanded optional first-launch onboarding (height, weight, DOB, city) to auto-calibrate stride, calories, and BMI
+- Modular README, diagrams, screenshots, and full v4.2 source release
