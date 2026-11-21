@@ -1,0 +1,31 @@
+Corvo is a 392 KB, 100% offline Android running companion and physiological toolkit built in pure Java and XML. The INTERNET permission is completely absent from the manifest — your routes, runs, body measurements, and heart rate logs never leave your device.
+
+KEY FEATURES
+
+CroSite 3-Layer Offline Distance Engine
+* Motion Guard uses the 50 Hz accelerometer to block GPS drift when standing still at traffic lights.
+* Smart Satellite Gate rejects weak indoor fixes while capturing fast sprints up to 10.5 m/s.
+* Self-Calibrating Stride Bridge learns your natural stride from height and clean GPS segments to bridge dropouts under trees or flyovers without double-counting.
+* Automatic 60s walk-rest protection pauses distance tracking during lap breaks and resumes seamlessly in your pocket.
+
+Camera Pulse Optical Heart Rate (PPG)
+* Measures Resting or Post-Run BPM in 15 seconds using only your rear camera and LED flash.
+* Locks camera exposure and white balance after a 1.5s settle window, applies a 2-pass zero-phase detrend filter, and validates beat intervals via normalized autocorrelation.
+* Automatically attaches post-run recovery BPM to your run log and feeds resting BPM into your Strength score.
+
+Recovery Brain & Analytics
+* Tracks acute-to-chronic workload across Load, Intensity, Fatigue, and Mood (PRIMED, STEADY, CAUTION, REST CALL).
+* Flexible streak protection allows up to 2 rest days per week plus 1-tap REST TODAY when overloaded.
+* 5-axis performance radar, pace trend curves, Mood Insight analyzer, Time Machine history scrubber, and offline dark AMOLED share cards.
+
+6 Synced Offline Labs (Tools)
+* Camera Pulse PPG + Pulse Log
+* Strength Level (Cardio + Pushups, Squats, Pullups & Plank timer)
+* BMI Tracker (2-way synced with your runner profile)
+* US Navy Body Fat % estimator
+* Pace & Split race calculator (1K-21K)
+* Dynamic daily + run-recovery Hydration target
+
+Backup & Safeguards
+* Single-file JSON backup and non-destructive merge import, plus silent weekly auto-backup on Android 10+.
+* Built-in typo guard, weekly ramp guard, process-death timer survival, Quick Settings tile, and 1x1 home screen streak widget.
