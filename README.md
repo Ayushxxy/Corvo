@@ -7,13 +7,15 @@
   <img src="https://img.shields.io/badge/INTERNET%20Permission-NONE-FF5252?style=for-the-badge" alt="Zero Internet Permission" />
   <img src="https://img.shields.io/badge/Android-7.0%2B-1E293B?style=for-the-badge" alt="Android 7.0+" />
   <img src="https://img.shields.io/badge/Pure%20Java%20%2B%20XML-No%20Gradle-00B4D8?style=for-the-badge" alt="Pure Java" />
-  <img src="https://img.shields.io/badge/License-MIT-64748B?style=for-the-badge" alt="MIT License" />
+  <img src="https://img.shields.io/badge/License-GPLv3-64748B?style=for-the-badge" alt="GPLv3 License" />
 </p>
 
 <h3>
-  <a href="https://github.com/Ayushxxy/Corvo/releases">Download Corvo v4.2 APK</a>
+  <a href="https://github.com/Ayushxxy/Corvo/releases/latest">Download Latest APK</a>
   &nbsp;&middot;&nbsp;
   <a href="#screenshots">Screenshots</a>
+  &nbsp;&middot;&nbsp;
+  <a href="#05--crow-evolution--streak-badges">Crow Ranks</a>
   &nbsp;&middot;&nbsp;
   <a href="#built-in-safeguards--hidden-powers">Safeguards &amp; Hidden Powers</a>
   &nbsp;&middot;&nbsp;
@@ -29,7 +31,7 @@
 Most fitness apps are **150–300 MB**, force logins and cloud sync, charge subscriptions for basic stats, and quietly collect your GPS routes and health patterns.
 
 **Corvo is built on a different rule:**
-- **392 KB total APK** — smaller than a single photo, zero lag even on budget phones.
+- **Ultra-lightweight native APK (`< 450 KB`)** — smaller than a single photo, zero lag even on budget phones.
 - **Zero `INTERNET` permission** — physically incapable of uploading, tracking, or calling any server.
 - **Real sensor engineering inside one AMOLED app** — 3-layer offline GPS/Stride tracker, real-time Camera + Flash optical heart rate scanner, recovery intelligence, and 6 synced physiology labs.
 
@@ -102,6 +104,24 @@ All 6 tools share a single source of truth with your **`THE FILE`** profile — 
 
 ---
 
+## 05 &middot; Crow Evolution & Streak Badges
+Every run keeps your streak alive (backed by up to **2 flexible Rest Days/week**). As your consistency grows across **`7D · 15D · 30D · 50D · 100D · 365D`** milestones, your obsidian companion transforms on both the **Home screen** and **`THE FILE` Dossier**:
+
+![Crow Evolution and Streak Badges](docs/crow-evolution.png)
+
+| Streak Range | Crow Rank | Badge Milestone | What Happens |
+| :---: | :--- | :---: | :--- |
+| **0–6 Days** | **COUCH** | Starting Form | Cloaked obsidian recruit; working toward the 7-day mark |
+| **7–14 Days** | **JOGGER** | `7D` Badge | First week locked in; bronze cuffs unlocked |
+| **15–29 Days** | **RUNNER** | `15D` Badge | Hood drops; gold trim appears as cadence settles |
+| **30–49 Days** | **SPRINTER** | `30D` Badge | One full month of discipline; armored collar |
+| **50–99 Days** | **BEAST** | `50D` Badge | Winged obsidian mantle forged at 50 consecutive days |
+| **100D / 365D** | **LEGEND** | `100D` · `365D` | Final crimson medallion form & full 1-year crown |
+
+> **Tip:** Tap any badge pill (`7`, `15`, `30`, `50`, `100`, `365`) inside the **`BEST`** tab to preview its Crow evolution and check exact days left!
+
+---
+
 ## Built-In Safeguards & Hidden Powers
 
 <details>
@@ -163,8 +183,8 @@ Output APK is saved to `app/build/Corvo-debug.apk`.
 
 ## Download & Install
 
-1. Open the **[Releases](https://github.com/Ayushxxy/Corvo/releases)** page.
-2. Download the latest **`Corvo-v4.2.apk`**.
+1. Open the **[Releases](https://github.com/Ayushxxy/Corvo/releases/latest)** page.
+2. Download the latest **`Corvo-*.apk`**.
 3. Install on **Android 7.0+** (`minSdk 24`, `targetSdk 33`).
 4. On first launch, enter your name and optional height/weight/DOB/city — calories, BMI, and CroSite Stride Bridge calibrate immediately.
 
@@ -172,4 +192,4 @@ Output APK is saved to `app/build/Corvo-debug.apk`.
 
 ## License
 
-Released under the [MIT License](LICENSE).
+Released under the **[GNU General Public License v3.0 (GPLv3)](LICENSE)**. You are free to inspect, fork, and modify Corvo, provided derivative works remain open-source under GPLv3.
