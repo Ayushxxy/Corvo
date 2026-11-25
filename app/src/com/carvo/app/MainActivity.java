@@ -11,6 +11,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.location.Location;
 import android.location.LocationListener;
@@ -24,6 +25,7 @@ import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -59,6 +61,7 @@ public class MainActivity extends Activity {
 
     private static final int REQ_EXPORT = 11;
     private static final int REQ_IMPORT = 22;
+    private static final int REQ_IMPORT_CMAP = 23;
     private static final int REQ_LOC = 33;
     private static final int REQ_CAM = 44;
 
@@ -102,7 +105,7 @@ public class MainActivity extends Activity {
     private int curTab = 0;
     private boolean uiResumed = false;
     private LinearLayout histList;
-    private TextView histEmpty, histRunsBig;
+    private TextView histEmpty;
     private TextView recFlame, recStreak, recBest, recTotal, recLong, recPace, recSpeed,
             recAvgPace, recAvgSpeed, recNext, wkThisKm, wkThisRuns, wkLastKm, wkLastRuns,
             wkDkm, wkDr, wkInsight, scoreLatest, scoreBest, scoreAvg, moodText;
@@ -117,18 +120,30 @@ public class MainActivity extends Activity {
     private TextView tmBanner, tmDate;
     private Button tmBack;
     private RadarView radar;
+    private TextView radAllBtn, rad14Btn, radSubTxt;
+    private boolean radar14d = false;
 
     // ================= RUN TIMER + CROSITE =================
-    private static final int T_RUN = 0, T_TIMED = 1;
-    private static final int TS_IDLE = 0, TS_RUN = 1, TS_PAUSE = 2, TS_DONE = 3, TS_REST = 4;
-    private View runScroll, tabRun;
-    private TextView modeRunBtn, modeTimedBtn, tMinus, tPlus, timedMinTxt;
-    private View timedPane, saveResumeRow;
-    private TextView timerText, timerHint, lapInfo;
-    private Button btnStart, btnPause, btnSaveRun, btnResume, btnDiscard, btnLap, btnLapUndo;
+    private static final int T_RUN = 0, T_TARGET = 1;
+    private static final int TS_IDLE = 0, TS_RUN = 1, TS_PAUSE = 2, TS_DONE = 3,
+            TS_REST = 4, TS_WARMUP = 5, TS_COOLDOWN = 6;
+    private View runScroll, tabRun, runGearWrap, runGearDot;
+    private TextView modeRunBtn, modeTimedBtn, tMinus, tPlus, timedMinTxt,
+            targetTimeBtn, targetDistBtn, targetUnitTxt;
+    private View timedPane, saveResumeRow, wuActionRow, playProgBox, playProgBg, playProgFill;
+    private TextView timerText, timerHint, lapInfo, playNextTxt;
+    private float toolSwX, toolSwY;
+    private boolean toolSwTracking = false, toolSwFired = false;
+    private Button btnStart, btnPause, btnSaveRun, btnResume, btnDiscard,
+            btnLap, btnLapUndo, btnSkipWu, btnCancelWu;
     private View lapRow;
     private View croRow, croStatusRow, croDot, croLiveRow, batWarnCard;
-    private TextView croOnBtn, croOffBtn, croStatusTxt, croDistTxt, croPaceTxt, batWarnTxt, batWarnDismiss;
+    private CroMapView croMapView;
+    private volatile CroMapPack croMapPack;
+    private double[] cachedTrail;
+    private long lastTrailReadMs = 0L;
+    private TextView croOnBtn, croOffBtn, croStatusTxt, croDistTxt, croPaceTxt,
+            croSpmTxt, croTurnTxt, batWarnTxt, batWarnDismiss;
     private LocationManager warmLm;
     private boolean warmingUp = false;
     private boolean pendingCroStart = false;
@@ -137,7 +152,8 @@ public class MainActivity extends Activity {
         public void onLocationChanged(Location loc) {
             if (loc == null) return;
             float acc = loc.hasAccuracy() ? loc.getAccuracy() : 999f;
-            CroSiteEngine.setWarmupSat(MainActivity.this, acc > 0 && acc <= CroSiteEngine.MAX_ACC_M, acc);
+            CroSiteEngine.setWarmupFix(MainActivity.this, loc.getLatitude(), loc.getLongitude(),
+                    acc, acc > 0 && acc <= CroSiteEngine.MAX_ACC_M);
             renderCroSiteUi();
         }
         @Override public void onStatusChanged(String p, int s, Bundle b) {}
@@ -148,15 +164,28 @@ public class MainActivity extends Activity {
     private final ArrayList<Long> lapMs = new ArrayList<Long>();
     private double[] pendingLaps;
     private SharedPreferences tprefs;
-    private int tMode, tState, tTimedMin;
-    private long tAccMs, tRunSince;
+    private int tMode, targetSub, tState, tTimedMin, wuPhase, wuIdx;
+    private double targetDistKm = 3.0;
+    private long tAccMs, tRunSince, wuEndMs, coolUntil, lastAutoSavedSeen;
     private Handler tHand;
     private final Runnable tTick = new Runnable() {
         @Override
         public void run() {
             syncTimerPrefs();
-            if (tState == TS_RUN) {
-                if (tMode == T_TIMED && remainMs() <= 0) {
+            if (checkAutoSavedSync()) return;
+            if (tState == TS_WARMUP) {
+                renderTimer();
+                tHand.postDelayed(tTick, 250L);
+            } else if (tState == TS_COOLDOWN) {
+                if (System.currentTimeMillis() >= coolUntil + 1200L) {
+                    syncTimerPrefs();
+                    renderTimer();
+                    if (tState == TS_IDLE) return;
+                }
+                renderTimer();
+                tHand.postDelayed(tTick, 250L);
+            } else if (tState == TS_RUN) {
+                if (tMode == T_TARGET && targetSub == 0 && remainMs() <= 0) {
                     tAccMs = tTimedMin * 60000L;
                     tRunSince = 0L;
                     tState = TS_DONE;
@@ -169,7 +198,7 @@ public class MainActivity extends Activity {
                     return;
                 }
                 renderTimer();
-                tHand.postDelayed(tTick, 500L);
+                tHand.postDelayed(tTick, tMode == T_TARGET && targetSub == 1 ? 350L : 500L);
             } else if (tState == TS_REST) {
                 if (System.currentTimeMillis() >= restUntil) {
                     tRunSince = System.currentTimeMillis();
@@ -278,7 +307,6 @@ public class MainActivity extends Activity {
         });
         histList = (LinearLayout) findViewById(R.id.histList);
         histEmpty = (TextView) findViewById(R.id.histEmpty);
-        histRunsBig = (TextView) findViewById(R.id.histRunsBig);
         exportBtn = (Button) findViewById(R.id.exportBtn);
         importBtn = (Button) findViewById(R.id.importBtn);
         recFlame = (TextView) findViewById(R.id.recFlame);
@@ -316,19 +344,47 @@ public class MainActivity extends Activity {
         croLiveRow = findViewById(R.id.croLiveRow);
         croDistTxt = (TextView) findViewById(R.id.croDistTxt);
         croPaceTxt = (TextView) findViewById(R.id.croPaceTxt);
+        croSpmTxt = (TextView) findViewById(R.id.croSpmTxt);
+        croTurnTxt = (TextView) findViewById(R.id.croTurnTxt);
+        runGearWrap = findViewById(R.id.runGearWrap);
+        runGearDot = findViewById(R.id.runGearDot);
         batWarnCard = findViewById(R.id.batWarnCard);
         batWarnTxt = (TextView) findViewById(R.id.batWarnTxt);
         batWarnDismiss = (TextView) findViewById(R.id.batWarnDismiss);
+        croMapView = (CroMapView) findViewById(R.id.croMapView);
+        if (croMapView != null) {
+            croMapView.setOnExpandListener(new CroMapView.OnExpandListener() {
+                @Override
+                public void onToggleExpand(boolean exp) {
+                    android.view.ViewGroup.LayoutParams lp = croMapView.getLayoutParams();
+                    if (lp != null) {
+                        lp.height = dp(exp ? 345 : 225);
+                        croMapView.setLayoutParams(lp);
+                    }
+                }
+            });
+        }
+        loadSavedMapAsync();
         warmLm = (LocationManager) getSystemService(LOCATION_SERVICE);
         modeRunBtn = (TextView) findViewById(R.id.modeRunBtn);
         modeTimedBtn = (TextView) findViewById(R.id.modeTimedBtn);
         timedPane = findViewById(R.id.timedPane);
+        targetTimeBtn = (TextView) findViewById(R.id.targetTimeBtn);
+        targetDistBtn = (TextView) findViewById(R.id.targetDistBtn);
+        targetUnitTxt = (TextView) findViewById(R.id.targetUnitTxt);
         tMinus = (TextView) findViewById(R.id.tMinus);
         tPlus = (TextView) findViewById(R.id.tPlus);
         timedMinTxt = (TextView) findViewById(R.id.timedMinTxt);
         timerText = (TextView) findViewById(R.id.timerText);
+        playProgBox = findViewById(R.id.playProgBox);
+        playProgBg = findViewById(R.id.playProgBg);
+        playProgFill = findViewById(R.id.playProgFill);
+        playNextTxt = (TextView) findViewById(R.id.playNextTxt);
         timerHint = (TextView) findViewById(R.id.timerHint);
         btnStart = (Button) findViewById(R.id.btnStart);
+        wuActionRow = findViewById(R.id.wuActionRow);
+        btnSkipWu = (Button) findViewById(R.id.btnSkipWu);
+        btnCancelWu = (Button) findViewById(R.id.btnCancelWu);
         btnPause = (Button) findViewById(R.id.btnPause);
         btnSaveRun = (Button) findViewById(R.id.btnSaveRun);
         btnResume = (Button) findViewById(R.id.btnResume);
@@ -343,6 +399,23 @@ public class MainActivity extends Activity {
         tmBack = (Button) findViewById(R.id.tmBack);
         tmBar = (TimeBar) findViewById(R.id.tmBar);
         radar = (RadarView) findViewById(R.id.radar);
+        radAllBtn = (TextView) findViewById(R.id.radAllBtn);
+        rad14Btn = (TextView) findViewById(R.id.rad14Btn);
+        radSubTxt = (TextView) findViewById(R.id.radSubTxt);
+        radAllBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                radar14d = false;
+                renderRadar();
+            }
+        });
+        rad14Btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                radar14d = true;
+                renderRadar();
+            }
+        });
         lapRow = findViewById(R.id.lapRow);
         btnLap = (Button) findViewById(R.id.btnLap);
         btnLapUndo = (Button) findViewById(R.id.btnLapUndo);
@@ -354,7 +427,12 @@ public class MainActivity extends Activity {
         saveBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                showDistance(false, null);
+                Double croKm = null;
+                if (tState != TS_IDLE && CroSiteEngine.isEnabled(MainActivity.this)) {
+                    double ck = CroSiteEngine.readDistKm(MainActivity.this);
+                    if (ck >= 0.005) croKm = Math.round(ck * 100.0) / 100.0;
+                }
+                showDistance(false, croKm);
             }
         });
         editBtn.setOnClickListener(new View.OnClickListener() {
@@ -432,11 +510,24 @@ public class MainActivity extends Activity {
             public void onClick(View v) {
                 if (tState != TS_IDLE) return;
                 CroSiteEngine.setEnabled(MainActivity.this, false);
+                if (tMode == T_TARGET && targetSub == 1) {
+                    targetSub = 0;
+                    saveT();
+                    toast("Switched Target to Time mode");
+                }
                 stopWarmup();
                 renderTimer();
                 checkBatteryOpt();
             }
         });
+        if (runGearWrap != null) {
+            runGearWrap.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    openRunSetupDialog();
+                }
+            });
+        }
         batWarnTxt.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -458,12 +549,8 @@ public class MainActivity extends Activity {
         });
 
         tprefs = getSharedPreferences("carvo_timer", MODE_PRIVATE);
-        tMode = tprefs.getInt("mode", T_RUN);
-        tState = tprefs.getInt("state", TS_IDLE);
-        tTimedMin = tprefs.getInt("timedMin", 30);
-        tAccMs = tprefs.getLong("accMs", 0L);
-        tRunSince = tprefs.getLong("runSince", 0L);
-        restUntil = tprefs.getLong("restUntil", 0L);
+        lastAutoSavedSeen = prefs.getLong("lastAutoSavedSeen", 0L);
+        syncTimerPrefs();
         try {
             org.json.JSONArray la = new org.json.JSONArray(tprefs.getString("laps", "[]"));
             for (int i = 0; i < la.length(); i++) lapMs.add(la.getLong(i));
@@ -479,25 +566,55 @@ public class MainActivity extends Activity {
         modeTimedBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                setMode(T_TIMED);
+                setMode(T_TARGET);
+            }
+        });
+        targetTimeBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setTargetSub(0);
+            }
+        });
+        targetDistBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setTargetSub(1);
             }
         });
         tMinus.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                stepMin(-5);
+                stepTarget(-1);
             }
         });
         tPlus.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                stepMin(5);
+                stepTarget(1);
+            }
+        });
+        timedMinTxt.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                editTargetPrompt();
             }
         });
         btnStart.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 startT();
+            }
+        });
+        btnSkipWu.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                skipWarmup();
+            }
+        });
+        btnCancelWu.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                cancelWarmup();
             }
         });
         btnPause.setOnClickListener(new View.OnClickListener() {
@@ -628,6 +745,48 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (curTab == 4 && toolsUI != null && toolsUI.isDetailOpen()) {
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    toolSwX = ev.getX();
+                    toolSwY = ev.getY();
+                    toolSwTracking = true;
+                    toolSwFired = false;
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (toolSwTracking && !toolSwFired) {
+                        float dx = ev.getX() - toolSwX;
+                        float dy = ev.getY() - toolSwY;
+                        if (Math.abs(dx) > dp(50) && Math.abs(dx) > Math.abs(dy) * 1.45f) {
+                            toolSwFired = true;
+                            toolSwTracking = false;
+                            MotionEvent cancel = MotionEvent.obtain(ev);
+                            cancel.setAction(MotionEvent.ACTION_CANCEL);
+                            super.dispatchTouchEvent(cancel);
+                            cancel.recycle();
+                            toolsUI.stepTool(dx < 0 ? 1 : -1);
+                            return true;
+                        }
+                    }
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    toolSwTracking = false;
+                    if (toolSwFired) {
+                        toolSwFired = false;
+                        return true;
+                    }
+                    break;
+            }
+        } else {
+            toolSwTracking = false;
+            toolSwFired = false;
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    @Override
     public void onBackPressed() {
         if (curTab == 4 && toolsUI != null && toolsUI.handleBack()) {
             return;
@@ -644,10 +803,16 @@ public class MainActivity extends Activity {
                 pendingCroStart = false;
                 if (locOk) {
                     CroSiteEngine.setEnabled(this, true);
-                    startTNow(true);
+                    startT();
                 } else {
                     CroSiteEngine.setEnabled(this, false);
-                    toast("No location access \u2014 running Timer Only");
+                    if (tMode == T_TARGET && targetSub == 1) {
+                        targetSub = 0;
+                        saveT();
+                        toast("No location access \u2014 switched Target to Time");
+                    } else {
+                        toast("No location access \u2014 running Timer Only");
+                    }
                     startTNow(false);
                 }
             } else {
@@ -711,47 +876,57 @@ public class MainActivity extends Activity {
         guideItem(list, "RECOVERY BRAIN",
                 "Tap the recovery strip below the Crow to inspect the 4-bar breakdown (Load, Intensity, Fatigue, Mood). When overloaded, tap REST TODAY to move a rest day to today.");
         guideItem(list, "SAVE RUN & EDIT",
-                "Tap SAVE RUN to enter KM then MIN + SEC. Tap EDIT anytime to update today's logged run.");
+                "Tap SAVE RUN to enter KM then MIN + SEC. Tap EDIT anytime to update or DISCARD today's logged run.");
         guideItem(list, "MOOD CHECK-IN & INSIGHT",
                 "Tap an emoji before and after saving a run. After enough runs, MOOD INSIGHT shows how starting mood shifts your /km pace.");
         guideItem(list, "RUN SCORE BREAKDOWN",
-                "Long-press the big score number (on Home or BEST) to see the exact weighting: Distance 30% · Pace 40% · Rhythm 20% · Improvement 10%.");
+                "Long-press the big score number (on Home or BEST) to see the exact weighting: Distance 30% \u00B7 Pace 40% \u00B7 Rhythm 20% \u00B7 Improvement 10%.");
         guideItem(list, "PINNED RUNS",
                 "Appears automatically on Home whenever you star milestone runs from LOG.");
 
         guideSection(list, "LOG TAB (HISTORY & BACKUP)");
+        guideItem(list, "TAP ANY RUN FOR DETAILS",
+                "Tap any run row to inspect full metrics (Calories, BPM, HRR-60, Cadence, OUT/BACK splits & Laps), Share its Day Card, Pin, or Delete it.");
         guideItem(list, "SWIPE RIGHT TO PIN",
                 "Swipe any run row to the right to pin or unpin a star onto your Home screen.");
         guideItem(list, "EXPORT / IMPORT",
-                "Saves or restores one offline corvo-backup.json file (runs, laps, BPM, body profile & Pulse Log). Import merges safely without overwriting existing runs.");
+                "Saves or restores one offline corvo-backup.json file (runs, laps, BPM, HRR-60, cadence, BOLT, body profile & Pulse Log). Import merges safely without overwriting existing runs.");
         guideItem(list, "SHARE POSTERS",
-                "Tap SHARE to generate clean dark PNG cards: RADAR PROFILE, STAT CARD (Week/Month/Year), or DAY CARD (single run + lap chart).");
+                "Tap SHARE to generate clean dark PNG cards: RADAR PROFILE, STAT CARD (Week/Month/Year), or DAY CARD (single run + splits + cadence).");
 
-        guideSection(list, "PLAY TAB (TIMER & CROSITE)");
-        guideItem(list, "RUN vs TIMED MODE",
-                "RUN = open stopwatch with laps. TIMED = goal countdown timer (use - / + to adjust target minutes).");
-        guideItem(list, "CROSITE GPS vs TIMER ONLY",
-                "Choose CROSITE GPS for outdoor runs. Its 3-layer engine blocks standing GPS jitter, calibrates your Stride Bridge, and tracks distance even with the screen locked. On SAVE RUN, CroSite KM pre-fills automatically.");
+        guideSection(list, "PLAY TAB (TIMER & CROSITE PRO)");
+        guideItem(list, "RUN vs TARGET MODE",
+                "RUN = open stopwatch with laps (manual pause/save). TARGET = choose TIME countdown or DISTANCE auto-finish (auto-saves exact target KM & run time, then gives a 3..2..1..Done! slow-down voice cue).");
+        guideItem(list, "CROSITE GPS PRO",
+                "Choose CROSITE GPS for outdoor runs. Tracks live Cadence (SPM), auto-detects highway Turnarounds (OUT vs BACK pace), calibrates your Stride Bridge, and tracks distance with screen locked.");
+        guideItem(list, "VOICE COACH, WARM-UP & METRONOME",
+                "Tap the top-right gear icon on PLAY to enable VOICE COACH (0.85x pace & km cues), nested WARM-UP (5..4..3..2..1..Go! + EDIT), and cadence METRONOME SPM.");
+        guideItem(list, "OFFLINE AREA MAP (.CMAP)",
+                "Import an offline .cmap vector map inside \u2699 RUN SETUP (built with Corvo Map Cutter — zero internet). Pinch to zoom, 2-finger rotate, tap \u2922 to expand, and \u25CE / N to re-center on GPS & North.");
         guideItem(list, "LAP & 60s REST",
                 "In RUN mode, tap LAP to close a segment and start a 1-minute rest countdown. CroSite pauses during rest and auto-resumes when rest ends (or tap SKIP REST). Tap UNDO to remove the last lap.");
-        guideItem(list, "POST-RUN BPM PROMPT",
-                "Right after saving a timed run, Corvo offers a 1-tap jump to Camera Pulse to attach recovery heart rate to that run.");
+        guideItem(list, "POST-RUN BPM & HRR-60",
+                "Right after saving a timed run, measure immediate 15s BPM or run the 60s HRR-60 recovery test to record your 1-minute heart rate drop.");
 
         guideSection(list, "BEST TAB (RECORDS & TIME MACHINE)");
         guideItem(list, "STREAK BADGES (7 TO 365)",
                 "Tap any circle badge (7, 15, 30, 50, 100, 365) to preview its Crow form and days left to unlock.");
-        guideItem(list, "5-AXIS RADAR",
-                "Maps your long-term Pace, Distance, 30-Day Rhythm, Streak & Avg Score.");
+        guideItem(list, "5-AXIS RADAR (ALL-TIME / 14D FORM)",
+                "Switch between ALL-TIME career shape and 14D FORM recent momentum.");
         guideItem(list, "TIME MACHINE SLIDER",
                 "Drag the bottom dot bar left or right to rewind stats & trends to any past day. Tap BACK TO TODAY to return.");
 
-        guideSection(list, "TOOLS TAB (6 OFFLINE LABS)");
-        guideItem(list, "CAMERA PULSE (PPG BPM)",
-                "Gently place one fingertip over both the rear camera lens and flash for 15s (light touch — don't press hard). Graphs live pulse waves and saves tagged entries (RESTING / POST-RUN / CHECK) to PULSE LOG.");
-        guideItem(list, "STRENGTH LEVEL",
-                "Combines auto Cardio + Resting BPM (pulled from runs & Pulse Log) with manual Pushups, Squats, Pullups & a live Plank timer.");
-        guideItem(list, "BODY & PACE LABS",
-                "BMI, Body Fat %, Pace & Split, and Hydration sync two-way with THE FILE. Tap any slider's big number to type an exact value.");
+        guideSection(list, "TOOLS TAB (8 OFFLINE LABS)");
+        guideItem(list, "SWIPE LEFT / RIGHT BETWEEN LABS",
+                "Open any lab and swipe left or right (or tap ‹ / › in the top bar) to jump straight to the next or previous tool.");
+        guideItem(list, "CAMERA PULSE PRO (BPM · HRV · HRR-60)",
+                "Gently place one fingertip over rear camera lens + flash. Supports 15s Pulse, 25s morning HRV readiness (RMSSD ms feeding Recovery Brain), and guided 60s HRR-60 drop.");
+        guideItem(list, "VO2 MAX & 5 PACE ZONES",
+                "Computes VO2 Max, Fitness Age, personalized Z1-Z5 training paces, and 1K / 5K / 10K / Half-Marathon race predictions from your best Corvo runs.");
+        guideItem(list, "BOLT BREATH LAB & COOLDOWN",
+                "Measure morning CO2 tolerance score and follow a guided 4s Inhale \u00B7 6s Exhale post-run recovery pacer.");
+        guideItem(list, "STRENGTH, BODY, PACE & HYDRATION",
+                "All other labs stay synced two-way with THE FILE. Tap any slider's value (or Target Pace MM:SS) to enter exact numbers.");
 
         guideSection(list, "SETTINGS & HOME WIDGET");
         guideItem(list, "REST DAYS",
@@ -1065,31 +1240,38 @@ public class MainActivity extends Activity {
     // ================= RECOVERY BRAIN =================
 
     private void renderRecovery() {
-        RunStore.Recovery r = store.recovery();
+        RunStore.Run todayRun = store.get(RunStore.today());
         int color;
         String state, msg;
-        if (r.verdict == 4) {
-            color = 0xFF8A94A6;
-            state = "RECOVERY \u00B7 LEARNING";
-            msg = "He is still learning who you are";
-        } else if (r.verdict == 0) {
-            color = 0xFF00E5A0;
-            state = "RECOVERY \u00B7 PRIMED";
-            msg = "Load balanced, mood up \u2014 push day";
-        } else if (r.verdict == 2) {
-            color = 0xFFFFB454;
-            state = "RECOVERY \u00B7 CAUTION";
-            msg = "Body is loaded \u2014 keep today easy and short";
-        } else if (r.verdict == 3) {
-            color = 0xFFFF5C5C;
-            state = "RECOVERY \u00B7 REST CALL";
-            msg = r.spike
-                    ? "Yesterday was big \u2014 rest today, streak stays safe"
-                    : "Body is tired \u2014 rest today, streak stays safe";
+        if (todayRun != null) {
+            color = 0xFF00B4D8;
+            state = "RECOVERY \u00B7 DONE FOR TODAY";
+            msg = "Run logged \u2014 hydrate, rest & recharge till tomorrow";
         } else {
-            color = 0xFF8A94A6;
-            state = "RECOVERY \u00B7 STEADY";
-            msg = r.hasData ? "All normal \u2014 regular run" : "Need a few more runs to read you";
+            RunStore.Recovery r = store.recovery();
+            if (r.verdict == 4) {
+                color = 0xFF8A94A6;
+                state = "RECOVERY \u00B7 LEARNING";
+                msg = "He is still learning who you are";
+            } else if (r.verdict == 0) {
+                color = 0xFF00E5A0;
+                state = "RECOVERY \u00B7 PRIMED";
+                msg = "Load balanced, mood up \u2014 push day";
+            } else if (r.verdict == 2) {
+                color = 0xFFFFB454;
+                state = "RECOVERY \u00B7 CAUTION";
+                msg = "Body is loaded \u2014 keep today easy and short";
+            } else if (r.verdict == 3) {
+                color = 0xFFFF5C5C;
+                state = "RECOVERY \u00B7 REST CALL";
+                msg = r.spike
+                        ? "Yesterday was big \u2014 rest today, streak stays safe"
+                        : "Body is tired \u2014 rest today, streak stays safe";
+            } else {
+                color = 0xFF8A94A6;
+                state = "RECOVERY \u00B7 STEADY";
+                msg = r.hasData ? "All normal \u2014 regular run" : "Need a few more runs to read you";
+            }
         }
         android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
         gd.setShape(android.graphics.drawable.GradientDrawable.OVAL);
@@ -1101,6 +1283,7 @@ public class MainActivity extends Activity {
     }
 
     private void recoveryDialog() {
+        RunStore.Run todayRun = store.get(RunStore.today());
         RunStore.Recovery r = store.recovery();
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
@@ -1109,12 +1292,27 @@ public class MainActivity extends Activity {
         String[] VN = {"PRIMED", "STEADY", "CAUTION", "REST CALL", "LEARNING"};
         int[] VC = {0xFF00E5A0, 0xFF8A94A6, 0xFFFFB454, 0xFFFF5C5C, 0xFF8A94A6};
         TextView vd = new TextView(this);
-        vd.setText(VN[r.verdict]);
+        if (todayRun != null) {
+            vd.setText("DONE FOR TODAY");
+            vd.setTextColor(0xFF00B4D8);
+        } else {
+            vd.setText(VN[r.verdict]);
+            vd.setTextColor(VC[r.verdict]);
+        }
         vd.setTextSize(22);
         vd.setLetterSpacing(0.18f);
         vd.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        vd.setTextColor(VC[r.verdict]);
         list.addView(vd);
+        if (todayRun != null) {
+            TextView sub = new TextView(this);
+            sub.setText("Run logged today \u2014 fresh recovery call unlocks tomorrow");
+            sub.setTextSize(11);
+            sub.setTextColor(0xFF8A94A6);
+            LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            slp.topMargin = dp(4);
+            list.addView(sub, slp);
+        }
 
         int loadLvl = 0, loadCol = 0xFF8A94A6;
         String loadNote = "NOT ENOUGH DATA YET";
@@ -1185,7 +1383,18 @@ public class MainActivity extends Activity {
         }
         addBar(list, "MOOD", mdLvl, mdCol, mdNote + " \u2014 BEFORE VS AFTER RUN");
 
-        if (r.verdict == 3) {
+        double hrvToday = PulseEngine.latestHrvForDate(prefs, RunStore.today());
+        double hrvBase = PulseEngine.baselineHrv(prefs);
+        if (hrvToday >= 5.0 && hrvBase >= 15.0) {
+            double pct = (hrvToday - hrvBase) / hrvBase;
+            int hLvl = pct <= -0.25 ? 9 : (pct <= -0.10 ? 6 : 2);
+            int hCol = pct <= -0.25 ? 0xFFFF5C5C : (pct <= -0.10 ? 0xFFFFB454 : 0xFF00E5A0);
+            String hNote = String.format(Locale.US, "%.0f MS TODAY VS %.0f MS AVG%s",
+                    hrvToday, hrvBase, pct <= -0.25 ? " \u2014 RECOVERY NEEDED" : "");
+            addBar(list, "HRV", hLvl, hCol, hNote);
+        }
+
+        if (todayRun == null && r.verdict == 3) {
             String today = RunStore.today();
             if (store.isRestDay(today)) {
                 list.addView(tinyLabel("TODAY IS ALREADY A REST DAY", dp(12)));
@@ -1407,6 +1616,7 @@ public class MainActivity extends Activity {
     }
 
     private String fileStatus() {
+        if (store.get(RunStore.today()) != null) return "RECHARGING";
         RunStore.Recovery r = store.recovery();
         if (r.verdict == 3) return "RECOVERING";
         if (r.verdict == 2) return "WATCHED";
@@ -1849,9 +2059,12 @@ public class MainActivity extends Activity {
 
     private void showDistance(final boolean edit, final Double kmValue, final Double timeOverride) {
         View dv = getLayoutInflater().inflate(R.layout.dialog_distance, null);
+        TextView dh = (TextView) dv.findViewById(R.id.dlgHelper);
         if (timeOverride != null) {
-            TextView dh = (TextView) dv.findViewById(R.id.dlgHelper);
-            dh.setText("TIME " + clockText(timeOverride) + " \u00B7 FROM TIMER");
+            dh.setText("TIME " + clockText(timeOverride) + (kmValue != null
+                    ? " \u00B7 CROSITE PREFILLED" : " \u00B7 FROM TIMER"));
+        } else if (kmValue != null && !edit) {
+            dh.setText("CROSITE PREFILLED \u00B7 EDIT IF NEEDED");
         }
         final EditText et = (EditText) dv.findViewById(R.id.dlgKm);
         LinearLayout chipRow = (LinearLayout) dv.findViewById(R.id.chipRow);
@@ -1866,26 +2079,55 @@ public class MainActivity extends Activity {
                     @Override
                     public void onClick(View x) {
                         et.setText(fmtKm(v));
+                        et.setSelection(et.getText().length());
                     }
                 });
             } else {
                 ch.setVisibility(View.GONE);
             }
         }
-        if (chips.length == 0) chipRow.setVisibility(View.GONE);
+        if (chips.length == 0) {
+            chipRow.setVisibility(View.GONE);
+            View cl = dv.findViewById(R.id.chipLabel);
+            if (cl != null) cl.setVisibility(View.GONE);
+        }
         if (kmValue != null) {
             et.setText(fmtKm(kmValue));
+            et.setSelection(et.getText().length());
         } else if (edit) {
             RunStore.Run t = store.get(RunStore.today());
-            if (t != null) et.setText(fmtKm(t.km));
+            if (t != null) {
+                et.setText(fmtKm(t.km));
+                et.setSelection(et.getText().length());
+            }
         }
-        final AlertDialog d = new AlertDialog.Builder(this)
+        AlertDialog.Builder db = new AlertDialog.Builder(this)
                 .setTitle(timeOverride != null ? "SAVE RUN"
-                        : (edit ? "EDIT DISTANCE" : "DISTANCE"))
+                        : (edit ? "EDIT TODAY'S RUN" : "DISTANCE"))
                 .setView(dv)
                 .setPositiveButton("NEXT", null)
-                .setNegativeButton("CANCEL", null)
-                .create();
+                .setNegativeButton("CANCEL", null);
+        if (edit && timeOverride == null && store.get(RunStore.today()) != null) {
+            db.setNeutralButton("DISCARD", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dlg, int w) {
+                    new AlertDialog.Builder(MainActivity.this)
+                            .setTitle("DISCARD TODAY'S RUN?")
+                            .setMessage("This removes today's logged run permanently.")
+                            .setPositiveButton("DISCARD", new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dlg2, int w2) {
+                                    store.remove(RunStore.today());
+                                    render();
+                                    toast("Today's run discarded");
+                                }
+                            })
+                            .setNegativeButton("KEEP", null)
+                            .show();
+                }
+            });
+        }
+        final AlertDialog d = db.create();
         d.show();
         final Runnable next = new Runnable() {
             @Override
@@ -2049,13 +2291,20 @@ public class MainActivity extends Activity {
 
     private void promptPostRunBpm() {
         new AlertDialog.Builder(this)
-                .setTitle("MEASURE POST-RUN BPM?")
-                .setMessage("Check recovery heart rate now with Camera Pulse (15s).")
-                .setPositiveButton("MEASURE NOW", new DialogInterface.OnClickListener() {
+                .setTitle("MEASURE POST-RUN PULSE?")
+                .setMessage("Check immediate 15s BPM or run the 60s HRR-60 cardiac recovery test.")
+                .setPositiveButton("15S BPM", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface d, int w) {
                         showTab(4);
                         if (toolsUI != null) toolsUI.openPulsePostRun();
+                    }
+                })
+                .setNeutralButton("HRR-60", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        showTab(4);
+                        if (toolsUI != null) toolsUI.openPulseHrr60();
                     }
                 })
                 .setNegativeButton("LATER", null)
@@ -2158,27 +2407,60 @@ public class MainActivity extends Activity {
             lb.append(v);
         }
         tprefs.edit().putInt("mode", tMode)
+                .putInt("targetSub", targetSub)
+                .putLong("targetDistBits", Double.doubleToRawLongBits(targetDistKm))
                 .putInt("state", tState)
                 .putInt("timedMin", tTimedMin)
                 .putLong("accMs", tAccMs)
                 .putLong("runSince", tRunSince)
                 .putLong("restUntil", restUntil)
+                .putInt("wuPhase", wuPhase)
+                .putInt("wuIdx", wuIdx)
+                .putLong("wuEndMs", wuEndMs)
+                .putLong("coolUntil", coolUntil)
                 .putString("laps", "[" + lb + "]")
                 .apply();
     }
 
     private void syncTimerPrefs() {
         tMode = tprefs.getInt("mode", T_RUN);
+        targetSub = tprefs.getInt("targetSub", 0);
+        targetDistKm = CroSiteService.readTargetDistKm(tprefs);
         tState = tprefs.getInt("state", TS_IDLE);
         tTimedMin = tprefs.getInt("timedMin", 30);
         tAccMs = tprefs.getLong("accMs", 0L);
         tRunSince = tprefs.getLong("runSince", 0L);
         restUntil = tprefs.getLong("restUntil", 0L);
+        wuPhase = tprefs.getInt("wuPhase", 0);
+        wuIdx = tprefs.getInt("wuIdx", 0);
+        wuEndMs = tprefs.getLong("wuEndMs", 0L);
+        coolUntil = tprefs.getLong("coolUntil", 0L);
+    }
+
+    private boolean checkAutoSavedSync() {
+        long at = tprefs.getLong("autoSavedAt", 0L);
+        if (at > lastAutoSavedSeen) {
+            lastAutoSavedSeen = at;
+            prefs.edit().putLong("lastAutoSavedSeen", at).apply();
+            store.reload();
+            resetTimeMachine();
+            render();
+            String msg = tprefs.getString("autoSavedMsg", "Target saved \u2713");
+            toast(msg);
+            if (tState == TS_IDLE) {
+                tHand.removeCallbacks(tTick);
+                renderTimer();
+                if (uiResumed) promptPostRunBpm();
+                return true;
+            }
+        }
+        return false;
     }
 
     private void recoverT() {
         syncTimerPrefs();
-        if (tState == TS_RUN && tMode == T_TIMED && remainMs() <= 0) {
+        boolean synced = checkAutoSavedSync();
+        if (tState == TS_RUN && tMode == T_TARGET && targetSub == 0 && remainMs() <= 0) {
             tAccMs = tTimedMin * 60000L;
             tRunSince = 0L;
             tState = TS_DONE;
@@ -2195,16 +2477,26 @@ public class MainActivity extends Activity {
                 CroSiteService.dispatch(this, CroSiteService.ACT_RESUME);
             }
         }
+        if (tState == TS_COOLDOWN && System.currentTimeMillis() >= coolUntil + 1200L) {
+            tState = TS_IDLE;
+            tAccMs = 0L;
+            tRunSince = 0L;
+            saveT();
+        }
         if (tState == TS_RUN && CroSiteEngine.isEnabled(this) && hasLocPerm()) {
             CroSiteService.dispatch(this, CroSiteService.ACT_RESUME);
+        } else if (tState == TS_WARMUP) {
+            CroSiteService.dispatch(this, CroSiteService.ACT_SYNC_COACH);
         }
-        renderTimer();
+        if (!synced) renderTimer();
         startTick();
     }
 
     private void startTick() {
         tHand.removeCallbacks(tTick);
-        if (tState == TS_RUN || tState == TS_REST) tHand.postDelayed(tTick, 250L);
+        if (tState == TS_RUN || tState == TS_REST || tState == TS_WARMUP || tState == TS_COOLDOWN) {
+            tHand.postDelayed(tTick, 250L);
+        }
     }
 
     private void setMode(int m) {
@@ -2213,18 +2505,89 @@ public class MainActivity extends Activity {
             return;
         }
         tMode = m;
+        if (tMode == T_TARGET && targetSub == 1 && !CroSiteEngine.isEnabled(this)) {
+            CroSiteEngine.setEnabled(this, true);
+            updateWarmup();
+            toast("CroSite GPS enabled for Target Distance");
+        }
         saveT();
         renderTimer();
     }
 
-    private void stepMin(int d) {
+    private void setTargetSub(int sub) {
         if (tState != TS_IDLE) return;
-        int v = Math.max(5, Math.min(180, tTimedMin + d));
-        if (v != tTimedMin) {
-            tTimedMin = v;
-            saveT();
-            renderTimer();
+        targetSub = sub;
+        if (sub == 1 && !CroSiteEngine.isEnabled(this)) {
+            CroSiteEngine.setEnabled(this, true);
+            updateWarmup();
+            toast("CroSite GPS enabled for Target Distance");
         }
+        saveT();
+        renderTimer();
+    }
+
+    private void stepTarget(int dir) {
+        if (tState != TS_IDLE) return;
+        if (targetSub == 1) {
+            double v = Math.round(Math.max(0.5, Math.min(50.0, targetDistKm + dir * 0.5)) * 100.0) / 100.0;
+            if (Math.abs(v - targetDistKm) > 0.001) {
+                targetDistKm = v;
+                saveT();
+                renderTimer();
+            }
+        } else {
+            int v = Math.max(5, Math.min(180, tTimedMin + dir * 5));
+            if (v != tTimedMin) {
+                tTimedMin = v;
+                saveT();
+                renderTimer();
+            }
+        }
+    }
+
+    private void editTargetPrompt() {
+        if (tState != TS_IDLE || tMode != T_TARGET) return;
+        final EditText et = new EditText(this);
+        et.setInputType(InputType.TYPE_CLASS_NUMBER
+                | (targetSub == 1 ? InputType.TYPE_NUMBER_FLAG_DECIMAL : 0));
+        et.setText(targetSub == 1 ? fmtKm(targetDistKm) : String.valueOf(tTimedMin));
+        et.setSelection(et.getText().length());
+        et.setTextColor(0xFFF2F5FA);
+        et.setPadding(dp(20), dp(14), dp(20), dp(10));
+        new AlertDialog.Builder(this)
+                .setTitle(targetSub == 1 ? "TARGET DISTANCE (KM)" : "TARGET TIME (MINUTES)")
+                .setView(et)
+                .setPositiveButton("SET", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        try {
+                            String s = et.getText().toString().trim();
+                            if (targetSub == 1) {
+                                double v = Double.parseDouble(s);
+                                if (v >= 0.2 && v <= 100.0) {
+                                    targetDistKm = Math.round(v * 100.0) / 100.0;
+                                    saveT();
+                                    renderTimer();
+                                } else {
+                                    toast("Enter 0.2 to 100 km");
+                                }
+                            } else {
+                                int v = Integer.parseInt(s);
+                                if (v >= 1 && v <= 180) {
+                                    tTimedMin = v;
+                                    saveT();
+                                    renderTimer();
+                                } else {
+                                    toast("Enter 1 to 180 min");
+                                }
+                            }
+                        } catch (Exception e) {
+                            toast("Invalid number");
+                        }
+                    }
+                })
+                .setNegativeButton("CANCEL", null)
+                .show();
     }
 
     private boolean hasLocPerm() {
@@ -2274,6 +2637,9 @@ public class MainActivity extends Activity {
     }
 
     private void startT() {
+        if (tMode == T_TARGET && targetSub == 1 && !CroSiteEngine.isEnabled(this)) {
+            CroSiteEngine.setEnabled(this, true);
+        }
         if (CroSiteEngine.isEnabled(this) && !hasLocPerm()) {
             pendingCroStart = true;
             ArrayList<String> perms = new ArrayList<String>();
@@ -2288,16 +2654,54 @@ public class MainActivity extends Activity {
             requestPermissions(perms.toArray(new String[0]), REQ_LOC);
             return;
         }
-        startTNow(CroSiteEngine.isEnabled(this));
+        final boolean croOn = CroSiteEngine.isEnabled(this);
+        if (tMode == T_TARGET && targetSub == 1) {
+            RunStore.Run existing = store.get(RunStore.today());
+            if (existing != null) {
+                new AlertDialog.Builder(this)
+                        .setTitle("TODAY ALREADY HAS A RUN")
+                        .setMessage(String.format(Locale.US,
+                                "Target Distance auto-saves when %.2f km finishes and will update today's %.2f km run. Start anyway?",
+                                targetDistKm, existing.km))
+                        .setPositiveButton("START", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface d, int w) {
+                                startTNow(croOn);
+                            }
+                        })
+                        .setNegativeButton("CANCEL", null)
+                        .show();
+                return;
+            }
+        }
+        startTNow(croOn);
     }
 
     private void startTNow(boolean withCroSite) {
         stopWarmup();
+        cachedTrail = null;
+        boolean coachTts = prefs.getBoolean("coach_tts", false);
+        boolean wuOn = coachTts && prefs.getBoolean("coach_warmup_on", false);
+        List<CroSiteService.WarmMove> moves = wuOn ? CroSiteService.loadWarmupMoves(this) : null;
+        if (wuOn && moves != null && !moves.isEmpty()) {
+            long now = System.currentTimeMillis();
+            tAccMs = 0L;
+            tRunSince = 0L;
+            wuPhase = 0;
+            wuIdx = 0;
+            wuEndMs = now + 5000L;
+            tState = TS_WARMUP;
+            saveT();
+            CroSiteService.dispatch(this, CroSiteService.ACT_WARMUP);
+            renderTimer();
+            startTick();
+            return;
+        }
         tAccMs = 0L;
         tRunSince = System.currentTimeMillis();
         tState = TS_RUN;
         saveT();
-        if (withCroSite) {
+        if (withCroSite || coachTts || prefs.getBoolean("coach_metro", false)) {
             CroSiteService.dispatch(this, CroSiteService.ACT_START);
         } else {
             CroSiteEngine.resetAll(this);
@@ -2306,13 +2710,237 @@ public class MainActivity extends Activity {
         startTick();
     }
 
+    private void skipWarmup() {
+        if (tState != TS_WARMUP) return;
+        tAccMs = 0L;
+        tRunSince = System.currentTimeMillis();
+        tState = TS_RUN;
+        saveT();
+        if (CroSiteEngine.isEnabled(this) || prefs.getBoolean("coach_tts", false)
+                || prefs.getBoolean("coach_metro", false)) {
+            CroSiteService.dispatch(this, CroSiteService.ACT_START);
+        } else {
+            CroSiteService.dispatch(this, CroSiteService.ACT_STOP);
+            CroSiteEngine.resetAll(this);
+        }
+        renderTimer();
+        startTick();
+    }
+
+    private void cancelWarmup() {
+        if (tState != TS_WARMUP) return;
+        resetT();
+    }
+
+    private Runnable onRunSetupRefresh;
+
+    private void openWarmupEditor() {
+        final List<CroSiteService.WarmMove> moves = new ArrayList<CroSiteService.WarmMove>(
+                CroSiteService.loadWarmupMoves(this));
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(18), dp(10), dp(18), dp(12));
+
+        TextView tip = new TextView(this);
+        tip.setText("Counts 5..4..3..2..1 before warm-up starts, says '<Move> done' after each exercise, then counts 5..4..3..2..1..Go! into your run.");
+        tip.setTextSize(11);
+        tip.setTextColor(0xFF8A94A6);
+        root.addView(tip);
+
+        final LinearLayout listBox = new LinearLayout(this);
+        listBox.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams lbLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lbLp.topMargin = dp(10);
+        root.addView(listBox, lbLp);
+
+        final Runnable[] rebuild = new Runnable[1];
+        rebuild[0] = new Runnable() {
+            @Override
+            public void run() {
+                listBox.removeAllViews();
+                for (int i = 0; i < moves.size(); i++) {
+                    final int idx = i;
+                    final CroSiteService.WarmMove mv = moves.get(i);
+                    LinearLayout row = new LinearLayout(MainActivity.this);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    row.setGravity(Gravity.CENTER_VERTICAL);
+                    row.setBackgroundResource(R.drawable.badge_off);
+                    row.setPadding(dp(12), dp(8), dp(8), dp(8));
+                    LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    rLp.topMargin = dp(6);
+
+                    TextView txt = new TextView(MainActivity.this);
+                    txt.setText((i + 1) + ". " + mv.name + "  \u00B7  " + mv.sec + "s");
+                    txt.setTextSize(12);
+                    txt.setTypeface(Typeface.DEFAULT_BOLD);
+                    txt.setTextColor(0xFFF2F5FA);
+                    txt.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            promptMoveDialog(mv, new Runnable() {
+                                @Override
+                                public void run() {
+                                    CroSiteService.saveWarmupMoves(MainActivity.this, moves);
+                                    rebuild[0].run();
+                                    renderCroSiteUi();
+                                    if (onRunSetupRefresh != null) onRunSetupRefresh.run();
+                                }
+                            });
+                        }
+                    });
+                    row.addView(txt, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+                    if (i > 0) {
+                        TextView up = smallMoveBtn("\u25B2", 0xFF8A94A6);
+                        up.setOnClickListener(new View.OnClickListener() {
+                            @Override
+                            public void onClick(View v) {
+                                java.util.Collections.swap(moves, idx, idx - 1);
+                                CroSiteService.saveWarmupMoves(MainActivity.this, moves);
+                                rebuild[0].run();
+                                renderCroSiteUi();
+                                if (onRunSetupRefresh != null) onRunSetupRefresh.run();
+                            }
+                        });
+                        row.addView(up);
+                    }
+                    if (i < moves.size() - 1) {
+                        TextView dn = smallMoveBtn("\u25BC", 0xFF8A94A6);
+                        dn.setOnClickListener(new View.OnClickListener() {
+                            @Override
+                            public void onClick(View v) {
+                                java.util.Collections.swap(moves, idx, idx + 1);
+                                CroSiteService.saveWarmupMoves(MainActivity.this, moves);
+                                rebuild[0].run();
+                                renderCroSiteUi();
+                                if (onRunSetupRefresh != null) onRunSetupRefresh.run();
+                            }
+                        });
+                        row.addView(dn);
+                    }
+                    if (moves.size() > 1) {
+                        TextView del = smallMoveBtn("\u00D7", 0xFFFF5C5C);
+                        del.setOnClickListener(new View.OnClickListener() {
+                            @Override
+                            public void onClick(View v) {
+                                moves.remove(idx);
+                                CroSiteService.saveWarmupMoves(MainActivity.this, moves);
+                                rebuild[0].run();
+                                renderCroSiteUi();
+                                if (onRunSetupRefresh != null) onRunSetupRefresh.run();
+                            }
+                        });
+                        row.addView(del);
+                    }
+                    listBox.addView(row, rLp);
+                }
+            }
+        };
+        rebuild[0].run();
+
+        android.widget.ScrollView sc = new android.widget.ScrollView(this);
+        sc.addView(root);
+        new AlertDialog.Builder(this)
+                .setTitle("WARM-UP EXERCISES")
+                .setView(sc)
+                .setPositiveButton("+ ADD MOVE", null)
+                .setNeutralButton("RESET", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        prefs.edit().remove("coach_warmup_list").apply();
+                        renderCroSiteUi();
+                        if (onRunSetupRefresh != null) onRunSetupRefresh.run();
+                        toast("Reset to defaults");
+                    }
+                })
+                .setNegativeButton("DONE", null)
+                .show()
+                .getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        final CroSiteService.WarmMove nm = new CroSiteService.WarmMove("", 25);
+                        promptMoveDialog(nm, new Runnable() {
+                            @Override
+                            public void run() {
+                                if (nm.name.length() > 0) {
+                                    moves.add(nm);
+                                    CroSiteService.saveWarmupMoves(MainActivity.this, moves);
+                                    rebuild[0].run();
+                                    renderCroSiteUi();
+                                    if (onRunSetupRefresh != null) onRunSetupRefresh.run();
+                                }
+                            }
+                        });
+                    }
+                });
+    }
+
+    private TextView smallMoveBtn(String txt, int col) {
+        TextView tv = new TextView(this);
+        tv.setText(txt);
+        tv.setTextSize(12);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setTextColor(col);
+        tv.setGravity(Gravity.CENTER);
+        tv.setPadding(dp(8), dp(4), dp(8), dp(4));
+        return tv;
+    }
+
+    private void promptMoveDialog(final CroSiteService.WarmMove mv, final Runnable onSaved) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(12), dp(20), dp(8));
+
+        final EditText nEt = new EditText(this);
+        nEt.setHint("Exercise name (e.g. High Knees)");
+        nEt.setText(mv.name);
+        nEt.setTextColor(0xFFF2F5FA);
+        nEt.setHintTextColor(0xFF66708A);
+        box.addView(nEt);
+
+        final EditText sEt = new EditText(this);
+        sEt.setHint("Duration in seconds (e.g. 30)");
+        sEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        sEt.setText(String.valueOf(mv.sec));
+        sEt.setTextColor(0xFFF2F5FA);
+        sEt.setHintTextColor(0xFF66708A);
+        LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        sLp.topMargin = dp(8);
+        box.addView(sEt, sLp);
+
+        new AlertDialog.Builder(this)
+                .setTitle(mv.name.length() > 0 ? "EDIT EXERCISE" : "NEW EXERCISE")
+                .setView(box)
+                .setPositiveButton("SAVE", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        String n = nEt.getText().toString().trim();
+                        int s = 20;
+                        try { s = Integer.parseInt(sEt.getText().toString().trim()); } catch (Exception ignored) {}
+                        if (n.length() == 0) {
+                            toast("Enter exercise name");
+                            return;
+                        }
+                        mv.name = n;
+                        mv.sec = Math.max(5, Math.min(300, s));
+                        onSaved.run();
+                    }
+                })
+                .setNegativeButton("CANCEL", null)
+                .show();
+    }
+
     private void pauseT() {
         if (tState != TS_RUN) return;
         tAccMs = elapsedMs();
         tRunSince = 0L;
         tState = TS_PAUSE;
         saveT();
-        if (CroSiteEngine.isEnabled(this)) {
+        if (CroSiteEngine.isEnabled(this) || prefs.getBoolean("coach_tts", false)
+                || prefs.getBoolean("coach_metro", false)) {
             CroSiteService.dispatch(this, CroSiteService.ACT_PAUSE);
         }
         renderTimer();
@@ -2324,7 +2952,8 @@ public class MainActivity extends Activity {
         tRunSince = System.currentTimeMillis();
         tState = TS_RUN;
         saveT();
-        if (CroSiteEngine.isEnabled(this)) {
+        if (CroSiteEngine.isEnabled(this) || prefs.getBoolean("coach_tts", false)
+                || prefs.getBoolean("coach_metro", false)) {
             CroSiteService.dispatch(this, CroSiteService.ACT_RESUME);
         }
         renderTimer();
@@ -2396,7 +3025,7 @@ public class MainActivity extends Activity {
         Double croKm = null;
         if (CroSiteEngine.isEnabled(this)) {
             double ck = CroSiteEngine.readDistKm(this);
-            if (ck >= 0.02) croKm = Math.round(ck * 100.0) / 100.0;
+            if (ck >= 0.005) croKm = Math.round(ck * 100.0) / 100.0;
         }
         showDistance(false, croKm, min);
     }
@@ -2408,10 +3037,17 @@ public class MainActivity extends Activity {
         }
         double[] laps = pendingLaps;
         pendingLaps = null;
+        int avgCad = CroSiteEngine.isEnabled(this) ? CroSiteEngine.readAvgSpm(this) : 0;
+        double[] ob = CroSiteEngine.isEnabled(this)
+                ? CroSiteEngine.readOutBack(this, min) : new double[]{0, 0};
         resetT();
         showTab(0);
         commitRun(km, min, true);
         if (laps != null && laps.length > 0) store.setLaps(RunStore.today(), laps);
+        if (avgCad > 0 || ob[0] > 0) {
+            store.setCroPro(RunStore.today(), avgCad, ob[0], ob[1]);
+            render();
+        }
     }
 
     private void discardT() {
@@ -2436,6 +3072,7 @@ public class MainActivity extends Activity {
         restUntil = 0L;
         lapMs.clear();
         pendingLaps = null;
+        cachedTrail = null;
         saveT();
         CroSiteService.dispatch(this, CroSiteService.ACT_STOP);
         CroSiteEngine.resetAll(this);
@@ -2446,40 +3083,159 @@ public class MainActivity extends Activity {
 
     private void renderTimer() {
         boolean idle = tState == TS_IDLE;
+        boolean wu = tState == TS_WARMUP;
+        boolean cd = tState == TS_COOLDOWN;
+        modeRunBtn.setBackgroundResource(isAmoled() ? R.drawable.input_bg_a : R.drawable.input_bg);
         modeRunBtn.setTextColor(tMode == T_RUN ? 0xFF00E5A0 : 0xFF66708A);
-        modeTimedBtn.setTextColor(tMode == T_TIMED ? 0xFF00E5A0 : 0xFF66708A);
-        timedPane.setVisibility(idle && tMode == T_TIMED ? View.VISIBLE : View.GONE);
-        timedMinTxt.setText(String.valueOf(tTimedMin));
+        modeTimedBtn.setBackgroundResource(isAmoled() ? R.drawable.input_bg_a : R.drawable.input_bg);
+        modeTimedBtn.setTextColor(tMode == T_TARGET ? 0xFF00E5A0 : 0xFF66708A);
+        timedPane.setVisibility(idle && tMode == T_TARGET ? View.VISIBLE : View.GONE);
+        if (targetTimeBtn != null && targetDistBtn != null) {
+            targetTimeBtn.setBackgroundResource(targetSub == 0 ? R.drawable.badge_on : R.drawable.badge_off);
+            targetTimeBtn.setTextColor(targetSub == 0 ? 0xFF00E5A0 : 0xFF66708A);
+            targetDistBtn.setBackgroundResource(targetSub == 1 ? R.drawable.badge_on : R.drawable.badge_off);
+            targetDistBtn.setTextColor(targetSub == 1 ? 0xFF00E5A0 : 0xFF66708A);
+        }
+        timedMinTxt.setText(targetSub == 1 ? fmtKm(targetDistKm) : String.valueOf(tTimedMin));
+        if (targetUnitTxt != null) targetUnitTxt.setText(targetSub == 1 ? "KM" : "MINUTES");
+
         btnStart.setVisibility(idle ? View.VISIBLE : View.GONE);
+        if (wuActionRow != null) wuActionRow.setVisibility(wu ? View.VISIBLE : View.GONE);
         btnPause.setVisibility(tState == TS_RUN ? View.VISIBLE : View.GONE);
         boolean savable = tState == TS_PAUSE || tState == TS_DONE || tState == TS_REST;
         saveResumeRow.setVisibility(savable ? View.VISIBLE : View.GONE);
         btnResume.setVisibility(tState == TS_PAUSE ? View.VISIBLE : View.GONE);
         btnDiscard.setVisibility(savable ? View.VISIBLE : View.GONE);
-        if (tMode == T_TIMED) {
-            long ms = idle ? tTimedMin * 60000L : remainMs();
-            timerText.setText(clockText(ms / 60000.0));
-        } else {
-            timerText.setText(clockText(elapsedMs() / 60000.0));
-        }
-        timerText.setTextColor(tState == TS_DONE || tState == TS_REST ? 0xFFFFB454
-                : (tState == TS_RUN ? 0xFF00E5A0 : 0xFFF2F5FA));
+
         String hint;
-        if (tState == TS_IDLE) {
-            hint = tMode == T_TIMED ? "COUNTS DOWN TO ZERO" : "STOPWATCH \u00B7 COUNTS UP";
-        } else if (tState == TS_RUN) {
-            hint = "RUNNING \u2014 KEEPS COUNTING IF CLOSED";
-        } else if (tState == TS_PAUSE) {
-            hint = "PAUSED \u2014 SAVE, RESUME OR DISCARD";
-        } else if (tState == TS_REST) {
-            hint = "REST \u00B7 ONE MINUTE WALK BREAK";
+        float progFrac = -1f;
+        int progCol = 0xFF00E5A0;
+        String progLabel = null;
+        if (wu) {
+            long leftMs = Math.max(0L, wuEndMs - System.currentTimeMillis());
+            int leftS = (int) Math.ceil(leftMs / 1000.0);
+            timerText.setText(String.format(Locale.US, "0:%02d", Math.max(0, leftS)));
+            timerText.setTextColor(0xFF00B4D8);
+            progCol = 0xFF00B4D8;
+            if (wuPhase == 0) {
+                List<CroSiteService.WarmMove> mv = CroSiteService.loadWarmupMoves(this);
+                CroSiteService.WarmMove first = !mv.isEmpty() ? mv.get(0) : null;
+                hint = "PRE-WARMUP \u00B7 STARTING IN " + Math.max(1, Math.min(5, leftS)) + "...";
+                progFrac = Math.max(0.05f, Math.min(1f, 1f - leftMs / 5000f));
+                progLabel = first != null
+                        ? "FIRST: " + first.name.toUpperCase(Locale.US) + " \u00B7 " + first.sec + "S"
+                        : "GET READY";
+            } else if (wuPhase == 2) {
+                hint = "GET READY \u00B7 STARTING IN " + Math.max(1, Math.min(5, leftS)) + "...";
+                progFrac = Math.max(0.05f, Math.min(1f, 1f - leftMs / 6300f));
+                progLabel = "LAUNCHING RUN AUTOMATICALLY";
+            } else {
+                List<CroSiteService.WarmMove> mv = CroSiteService.loadWarmupMoves(this);
+                CroSiteService.WarmMove curM = wuIdx < mv.size() ? mv.get(wuIdx) : null;
+                String name = curM != null ? curM.name.toUpperCase(Locale.US) : "WARM-UP";
+                hint = "WARM-UP " + (wuIdx + 1) + "/" + mv.size() + " \u00B7 " + name;
+                double totMs = curM != null ? curM.sec * 1000.0 : 20000.0;
+                progFrac = (float) Math.max(0.03, Math.min(1.0, 1.0 - leftMs / totMs));
+                if (wuIdx + 1 < mv.size()) {
+                    CroSiteService.WarmMove nxt = mv.get(wuIdx + 1);
+                    progLabel = "NEXT: " + nxt.name.toUpperCase(Locale.US) + " \u00B7 " + nxt.sec + "S";
+                } else {
+                    progLabel = "NEXT: 5..4..3..2..1..GO!";
+                }
+            }
+        } else if (cd) {
+            long leftMs = Math.max(0L, coolUntil - System.currentTimeMillis());
+            if (leftMs > 3000L) {
+                timerText.setText("SAVED");
+            } else {
+                int s = Math.max(1, Math.min(3, (int) Math.ceil(leftMs / 1000.0)));
+                timerText.setText(String.valueOf(s));
+            }
+            timerText.setTextColor(0xFF00E5A0);
+            hint = "TARGET SAVED \u00B7 KEEP IT SLOW";
         } else {
-            hint = "TIME'S UP \u2014 SAVE YOUR RUN";
+            if (tMode == T_TARGET && targetSub == 0) {
+                long ms = idle ? tTimedMin * 60000L : remainMs();
+                timerText.setText(clockText(ms / 60000.0));
+            } else {
+                timerText.setText(clockText(elapsedMs() / 60000.0));
+            }
+            timerText.setTextColor(tState == TS_DONE || tState == TS_REST ? 0xFFFFB454
+                    : (tState == TS_RUN ? 0xFF00E5A0 : 0xFFF2F5FA));
+            if (idle) {
+                if (tMode == T_TARGET) {
+                    hint = targetSub == 1
+                            ? "AUTO-SAVES AT " + fmtKm(targetDistKm) + " KM"
+                            : "COUNTS DOWN TO ZERO";
+                } else {
+                    hint = "STOPWATCH \u00B7 COUNTS UP";
+                }
+            } else if (tState == TS_RUN) {
+                if (tMode == T_TARGET && targetSub == 1) {
+                    double doneKm = CroSiteEngine.readDistKm(this);
+                    double rem = Math.max(0.0, targetDistKm - doneKm);
+                    hint = String.format(Locale.US, "TARGET %s KM \u00B7 %.2f KM LEFT",
+                            fmtKm(targetDistKm), rem);
+                    progFrac = (float) Math.max(0.02, Math.min(1.0, doneKm / Math.max(0.1, targetDistKm)));
+                    progCol = 0xFF00E5A0;
+                    progLabel = String.format(Locale.US, "%.2f / %s KM \u00B7 %d%%",
+                            doneKm, fmtKm(targetDistKm), Math.min(100, Math.round(progFrac * 100f)));
+                } else {
+                    hint = "RUNNING \u2014 KEEPS COUNTING IF CLOSED";
+                }
+            } else if (tState == TS_PAUSE) {
+                if (tMode == T_TARGET && targetSub == 1) {
+                    double doneKm = CroSiteEngine.readDistKm(this);
+                    progFrac = (float) Math.max(0.02, Math.min(1.0, doneKm / Math.max(0.1, targetDistKm)));
+                    progCol = 0xFFFFB454;
+                    progLabel = String.format(Locale.US, "%.2f / %s KM \u00B7 PAUSED",
+                            doneKm, fmtKm(targetDistKm));
+                }
+                hint = "PAUSED \u2014 SAVE, RESUME OR DISCARD";
+            } else if (tState == TS_REST) {
+                hint = "REST \u00B7 ONE MINUTE WALK BREAK";
+            } else {
+                hint = "TIME'S UP \u2014 SAVE YOUR RUN";
+            }
         }
         timerHint.setText(hint);
 
-        // LAP row — sirf RUN mode (uska order), TIMED me kabhi nahi
-        lapRow.setVisibility(tMode == T_RUN && !idle ? View.VISIBLE : View.GONE);
+        if (playProgBox != null && playProgBg != null && playProgFill != null) {
+            if (progFrac >= 0f) {
+                playProgBox.setVisibility(View.VISIBLE);
+                playProgFill.setBackgroundColor(progCol);
+                final float pf = progFrac;
+                int pw = playProgBg.getWidth();
+                if (pw > 0) {
+                    playProgFill.getLayoutParams().width = Math.max(dp(4), Math.round(pw * pf));
+                    playProgFill.requestLayout();
+                } else {
+                    playProgBg.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            int w = playProgBg.getWidth();
+                            if (w > 0) {
+                                playProgFill.getLayoutParams().width = Math.max(dp(4), Math.round(w * pf));
+                                playProgFill.requestLayout();
+                            }
+                        }
+                    });
+                }
+                if (playNextTxt != null) {
+                    if (progLabel != null && progLabel.length() > 0) {
+                        playNextTxt.setText(progLabel);
+                        playNextTxt.setVisibility(View.VISIBLE);
+                    } else {
+                        playNextTxt.setVisibility(View.GONE);
+                    }
+                }
+            } else {
+                playProgBox.setVisibility(View.GONE);
+            }
+        }
+
+        // LAP row — sirf RUN mode (uska order), TARGET me kabhi nahi
+        lapRow.setVisibility(tMode == T_RUN && !idle && !wu && !cd ? View.VISIBLE : View.GONE);
         btnLap.setVisibility(tState == TS_RUN || tState == TS_REST ? View.VISIBLE : View.GONE);
         btnLap.setText(tState == TS_REST ? "SKIP REST" : "LAP");
         btnLapUndo.setVisibility(!lapMs.isEmpty() && tState != TS_IDLE ? View.VISIBLE : View.GONE);
@@ -2487,7 +3243,7 @@ public class MainActivity extends Activity {
             long left = Math.max(0L, restUntil - System.currentTimeMillis());
             lapInfo.setText("REST " + clockText(left / 60000.0) + " \u00B7 WALK IT OFF");
             lapInfo.setVisibility(View.VISIBLE);
-        } else if (!lapMs.isEmpty()) {
+        } else if (!lapMs.isEmpty() && !wu && !cd) {
             long last = lapMs.get(lapMs.size() - 1);
             long prev = lapMs.size() > 1 ? lapMs.get(lapMs.size() - 2) : 0L;
             lapInfo.setText("LAP " + lapMs.size() + " \u00B7 LAST "
@@ -2518,7 +3274,7 @@ public class MainActivity extends Activity {
             boolean gpsOn = warmLm != null && warmLm.isProviderEnabled(LocationManager.GPS_PROVIDER);
             if (!gpsOn) {
                 dotColor = 0xFFFFB454;
-                status = "TURN ON PHONE GPS FOR CROSITE";
+                status = "TURN ON LOCATION OF YOUR PHONE";
             } else if (!hasLocPerm()) {
                 dotColor = 0xFFFFB454;
                 status = "CROSITE \u00B7 GRANTS GPS ON START";
@@ -2530,6 +3286,12 @@ public class MainActivity extends Activity {
                 dotColor = 0xFF00B4D8;
                 status = "LOCKING SATELLITES...";
             }
+        } else if (tState == TS_WARMUP) {
+            dotColor = 0xFF00B4D8;
+            status = "VOICE COACH WARM-UP";
+        } else if (tState == TS_COOLDOWN) {
+            dotColor = 0xFF00E5A0;
+            status = "TARGET COMPLETE \u00B7 SAVED";
         } else if (tState == TS_REST) {
             dotColor = 0xFFFFB454;
             status = "CROSITE PAUSED DURING REST";
@@ -2549,7 +3311,7 @@ public class MainActivity extends Activity {
         croStatusTxt.setText(status);
         croStatusTxt.setTextColor(dotColor);
 
-        if (en && !idle) {
+        if (en && !idle && tState != TS_WARMUP && tState != TS_COOLDOWN) {
             croLiveRow.setVisibility(View.VISIBLE);
             double km = CroSiteEngine.readDistKm(this);
             croDistTxt.setText(String.format(Locale.US, "%.2f", km));
@@ -2560,9 +3322,488 @@ public class MainActivity extends Activity {
             } else {
                 croPaceTxt.setText("\u2014");
             }
+            int liveSpm = CroSiteEngine.readLiveSpm(this);
+            croSpmTxt.setText(liveSpm > 0 ? String.valueOf(liveSpm) : "\u2014");
+            if (CroSiteEngine.isTurnFound(this)) {
+                croTurnTxt.setVisibility(View.VISIBLE);
+                croTurnTxt.setText("\u21BA TURNAROUND LOCKED \u00B7 RECORDING BACK SPLIT");
+            } else {
+                croTurnTxt.setVisibility(View.GONE);
+            }
         } else {
             croLiveRow.setVisibility(View.GONE);
         }
+
+        if (croMapView != null) {
+            boolean showMap = en && croMapPack != null
+                    && prefs.getBoolean("map_show", true)
+                    && tState != TS_WARMUP && tState != TS_COOLDOWN;
+            if (showMap) {
+                croMapView.setVisibility(View.VISIBLE);
+                double[] fix = CroSiteEngine.readLiveFix(this);
+                boolean hasFix = fix != null;
+                long nowMs = System.currentTimeMillis();
+                if (tState == TS_IDLE) {
+                    cachedTrail = null;
+                } else if (cachedTrail == null || (nowMs - lastTrailReadMs) >= 1800L) {
+                    cachedTrail = CroSiteEngine.readTrail(this);
+                    lastTrailReadMs = nowMs;
+                }
+                double[] turn = tState != TS_IDLE ? CroSiteEngine.readTurnLatLon(this) : null;
+                croMapView.updateState(
+                        hasFix,
+                        hasFix ? fix[0] : 0.0,
+                        hasFix ? fix[1] : 0.0,
+                        hasFix ? (float) fix[2] : 0f,
+                        cachedTrail,
+                        turn != null,
+                        turn != null ? turn[0] : 0.0,
+                        turn != null ? turn[1] : 0.0
+                );
+            } else {
+                croMapView.setVisibility(View.GONE);
+            }
+        }
+
+        if (runGearDot != null) {
+            boolean armed = prefs.getBoolean("coach_tts", false)
+                    || prefs.getBoolean("coach_metro", false)
+                    || (croMapPack != null && prefs.getBoolean("map_show", true));
+            runGearDot.setVisibility(armed ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private void openRunSetupDialog() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(20), dp(10), dp(20), dp(12));
+
+        // 1) VOICE COACH + NESTED WARM-UP CARD
+        final LinearLayout voiceCard = new LinearLayout(this);
+        voiceCard.setOrientation(LinearLayout.VERTICAL);
+        voiceCard.setPadding(dp(16), dp(14), dp(16), dp(14));
+
+        LinearLayout vTop = new LinearLayout(this);
+        vTop.setOrientation(LinearLayout.HORIZONTAL);
+        vTop.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout vTxtCol = new LinearLayout(this);
+        vTxtCol.setOrientation(LinearLayout.VERTICAL);
+        TextView vTitle = new TextView(this);
+        vTitle.setText("VOICE COACH");
+        vTitle.setTextSize(14);
+        vTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        vTitle.setLetterSpacing(0.12f);
+        vTitle.setTextColor(0xFFF2F5FA);
+        TextView vSub = new TextView(this);
+        vSub.setText("0.85x offline pace, km & split cues");
+        vSub.setTextSize(11);
+        vSub.setTextColor(0xFF8A94A6);
+        vTxtCol.addView(vTitle);
+        vTxtCol.addView(vSub);
+        vTop.addView(vTxtCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        final TextView ttsPill = new TextView(this);
+        ttsPill.setGravity(Gravity.CENTER);
+        ttsPill.setPadding(dp(14), dp(6), dp(14), dp(6));
+        ttsPill.setMinWidth(dp(54));
+        ttsPill.setTextSize(11);
+        ttsPill.setTypeface(Typeface.DEFAULT_BOLD);
+        ttsPill.setLetterSpacing(0.12f);
+        vTop.addView(ttsPill);
+        voiceCard.addView(vTop);
+
+        View div = new View(this);
+        div.setBackgroundColor(isAmoled() ? 0xFF1B2230 : 0xFF232C42);
+        LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
+        dLp.topMargin = dp(12);
+        dLp.bottomMargin = dp(12);
+        voiceCard.addView(div, dLp);
+
+        // Nested Warm-Up + Cooldown sub-option inside Voice Coach
+        final LinearLayout wuSubBox = new LinearLayout(this);
+        wuSubBox.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout wTop = new LinearLayout(this);
+        wTop.setOrientation(LinearLayout.HORIZONTAL);
+        wTop.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout wTxtCol = new LinearLayout(this);
+        wTxtCol.setOrientation(LinearLayout.VERTICAL);
+        TextView wTitle = new TextView(this);
+        wTitle.setText("WARM-UP + COOLDOWN");
+        wTitle.setTextSize(12);
+        wTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        wTitle.setLetterSpacing(0.1f);
+        wTitle.setTextColor(0xFF00B4D8);
+        final TextView wSub = new TextView(this);
+        wSub.setTextSize(10);
+        wSub.setTextColor(0xFF8A94A6);
+        wTxtCol.addView(wTitle);
+        wTxtCol.addView(wSub);
+        wTop.addView(wTxtCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        final TextView wuPill = new TextView(this);
+        wuPill.setGravity(Gravity.CENTER);
+        wuPill.setPadding(dp(14), dp(6), dp(14), dp(6));
+        wuPill.setMinWidth(dp(54));
+        wuPill.setTextSize(11);
+        wuPill.setTypeface(Typeface.DEFAULT_BOLD);
+        wuPill.setLetterSpacing(0.12f);
+        wTop.addView(wuPill);
+        wuSubBox.addView(wTop);
+
+        LinearLayout wEditBar = new LinearLayout(this);
+        wEditBar.setOrientation(LinearLayout.HORIZONTAL);
+        wEditBar.setGravity(Gravity.CENTER_VERTICAL);
+        wEditBar.setBackgroundResource(isAmoled() ? R.drawable.input_bg_a : R.drawable.input_bg);
+        wEditBar.setPadding(dp(12), dp(9), dp(12), dp(9));
+        LinearLayout.LayoutParams weLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        weLp.topMargin = dp(10);
+        final TextView wuListTxt = new TextView(this);
+        wuListTxt.setTextSize(10);
+        wuListTxt.setTypeface(Typeface.DEFAULT_BOLD);
+        wuListTxt.setLetterSpacing(0.1f);
+        wuListTxt.setTextColor(0xFF8A94A6);
+        TextView wuEditLink = new TextView(this);
+        wuEditLink.setText("EDIT  \u203A");
+        wuEditLink.setTextSize(11);
+        wuEditLink.setTypeface(Typeface.DEFAULT_BOLD);
+        wuEditLink.setLetterSpacing(0.1f);
+        wuEditLink.setTextColor(0xFF00B4D8);
+        wEditBar.addView(wuListTxt, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        wEditBar.addView(wuEditLink);
+        wuSubBox.addView(wEditBar, weLp);
+        voiceCard.addView(wuSubBox);
+        root.addView(voiceCard);
+
+        // 2) METRONOME + SPM STEPPER CARD
+        final LinearLayout metroCard = new LinearLayout(this);
+        metroCard.setOrientation(LinearLayout.VERTICAL);
+        metroCard.setPadding(dp(16), dp(14), dp(16), dp(14));
+        LinearLayout.LayoutParams mcLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        mcLp.topMargin = dp(12);
+
+        LinearLayout mTop = new LinearLayout(this);
+        mTop.setOrientation(LinearLayout.HORIZONTAL);
+        mTop.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout mTxtCol = new LinearLayout(this);
+        mTxtCol.setOrientation(LinearLayout.VERTICAL);
+        TextView mTitle = new TextView(this);
+        mTitle.setText("METRONOME");
+        mTitle.setTextSize(14);
+        mTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        mTitle.setLetterSpacing(0.12f);
+        mTitle.setTextColor(0xFFF2F5FA);
+        TextView mSub = new TextView(this);
+        mSub.setText("Steady cadence click during run");
+        mSub.setTextSize(11);
+        mSub.setTextColor(0xFF8A94A6);
+        mTxtCol.addView(mTitle);
+        mTxtCol.addView(mSub);
+        mTop.addView(mTxtCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        final TextView metroPill = new TextView(this);
+        metroPill.setGravity(Gravity.CENTER);
+        metroPill.setPadding(dp(14), dp(6), dp(14), dp(6));
+        metroPill.setMinWidth(dp(54));
+        metroPill.setTextSize(11);
+        metroPill.setTypeface(Typeface.DEFAULT_BOLD);
+        metroPill.setLetterSpacing(0.12f);
+        mTop.addView(metroPill);
+        metroCard.addView(mTop);
+
+        LinearLayout stepRow = new LinearLayout(this);
+        stepRow.setOrientation(LinearLayout.HORIZONTAL);
+        stepRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams srLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        srLp.topMargin = dp(12);
+        TextView spmMinus = new TextView(this);
+        spmMinus.setText("\u2212");
+        spmMinus.setTextSize(20);
+        spmMinus.setTypeface(Typeface.DEFAULT_BOLD);
+        spmMinus.setTextColor(0xFFF2F5FA);
+        spmMinus.setGravity(Gravity.CENTER);
+        spmMinus.setBackgroundResource(isAmoled() ? R.drawable.input_bg_a : R.drawable.input_bg);
+        final TextView spmVal = new TextView(this);
+        spmVal.setGravity(Gravity.CENTER);
+        spmVal.setTextSize(16);
+        spmVal.setTypeface(Typeface.DEFAULT_BOLD);
+        spmVal.setLetterSpacing(0.08f);
+        TextView spmPlus = new TextView(this);
+        spmPlus.setText("+");
+        spmPlus.setTextSize(19);
+        spmPlus.setTypeface(Typeface.DEFAULT_BOLD);
+        spmPlus.setTextColor(0xFFF2F5FA);
+        spmPlus.setGravity(Gravity.CENTER);
+        spmPlus.setBackgroundResource(isAmoled() ? R.drawable.input_bg_a : R.drawable.input_bg);
+        stepRow.addView(spmMinus, new LinearLayout.LayoutParams(dp(44), dp(40)));
+        stepRow.addView(spmVal, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        stepRow.addView(spmPlus, new LinearLayout.LayoutParams(dp(44), dp(40)));
+        metroCard.addView(stepRow, srLp);
+        root.addView(metroCard, mcLp);
+
+        // 3) OFFLINE AREA MAP (.CMAP) CARD
+        final LinearLayout mapCard = new LinearLayout(this);
+        mapCard.setOrientation(LinearLayout.VERTICAL);
+        mapCard.setPadding(dp(16), dp(14), dp(16), dp(14));
+        LinearLayout.LayoutParams mapLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        mapLp.topMargin = dp(12);
+
+        LinearLayout mpTop = new LinearLayout(this);
+        mpTop.setOrientation(LinearLayout.HORIZONTAL);
+        mpTop.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout mpTxtCol = new LinearLayout(this);
+        mpTxtCol.setOrientation(LinearLayout.VERTICAL);
+        TextView mpTitle = new TextView(this);
+        mpTitle.setText("OFFLINE AREA MAP");
+        mpTitle.setTextSize(14);
+        mpTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        mpTitle.setLetterSpacing(0.12f);
+        mpTitle.setTextColor(0xFFF2F5FA);
+        final TextView mpSub = new TextView(this);
+        mpSub.setTextSize(11);
+        mpSub.setTextColor(0xFF8A94A6);
+        mpTxtCol.addView(mpTitle);
+        mpTxtCol.addView(mpSub);
+        mpTop.addView(mpTxtCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        final TextView mapPill = new TextView(this);
+        mapPill.setGravity(Gravity.CENTER);
+        mapPill.setPadding(dp(14), dp(6), dp(14), dp(6));
+        mapPill.setMinWidth(dp(54));
+        mapPill.setTextSize(11);
+        mapPill.setTypeface(Typeface.DEFAULT_BOLD);
+        mapPill.setLetterSpacing(0.12f);
+        mpTop.addView(mapPill);
+        mapCard.addView(mpTop);
+
+        LinearLayout mpBtnRow = new LinearLayout(this);
+        mpBtnRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams mpbLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        mpbLp.topMargin = dp(12);
+        final TextView mpImportBtn = new TextView(this);
+        mpImportBtn.setGravity(Gravity.CENTER);
+        mpImportBtn.setPadding(dp(12), dp(10), dp(12), dp(10));
+        mpImportBtn.setBackgroundResource(isAmoled() ? R.drawable.input_bg_a : R.drawable.input_bg);
+        mpImportBtn.setTextSize(11);
+        mpImportBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        mpImportBtn.setLetterSpacing(0.1f);
+        mpImportBtn.setTextColor(0xFF00E5A0);
+        final TextView mpClearBtn = new TextView(this);
+        mpClearBtn.setText("REMOVE");
+        mpClearBtn.setGravity(Gravity.CENTER);
+        mpClearBtn.setPadding(dp(14), dp(10), dp(14), dp(10));
+        mpClearBtn.setBackgroundResource(isAmoled() ? R.drawable.input_bg_a : R.drawable.input_bg);
+        mpClearBtn.setTextSize(11);
+        mpClearBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        mpClearBtn.setLetterSpacing(0.1f);
+        mpClearBtn.setTextColor(0xFFFFB454);
+        LinearLayout.LayoutParams mpcLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        mpcLp.leftMargin = dp(8);
+        mpBtnRow.addView(mpImportBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        mpBtnRow.addView(mpClearBtn, mpcLp);
+        mapCard.addView(mpBtnRow, mpbLp);
+        root.addView(mapCard, mapLp);
+
+        final Runnable syncUI = new Runnable() {
+            @Override
+            public void run() {
+                boolean ttsOn = prefs.getBoolean("coach_tts", false);
+                boolean wuOn = prefs.getBoolean("coach_warmup_on", false);
+                boolean metroOn = prefs.getBoolean("coach_metro", false);
+                int spm = prefs.getInt("coach_metro_spm", 172);
+                CroMapPack mp = croMapPack;
+                boolean mapOn = mp != null && prefs.getBoolean("map_show", true);
+                List<CroSiteService.WarmMove> mv = CroSiteService.loadWarmupMoves(MainActivity.this);
+                int sumS = 0;
+                for (CroSiteService.WarmMove m : mv) sumS += m.sec;
+
+                voiceCard.setBackgroundResource(ttsOn ? R.drawable.badge_on : R.drawable.badge_off);
+                ttsPill.setBackgroundResource(ttsOn ? R.drawable.badge_on : R.drawable.badge_off);
+                ttsPill.setTextColor(ttsOn ? 0xFF00E5A0 : 0xFF66708A);
+                ttsPill.setText(ttsOn ? "ON" : "OFF");
+
+                wuSubBox.setAlpha(ttsOn ? 1f : 0.55f);
+                boolean wuActive = ttsOn && wuOn;
+                wuPill.setBackgroundResource(wuActive ? R.drawable.badge_on : R.drawable.badge_off);
+                wuPill.setTextColor(wuActive ? 0xFF00E5A0 : 0xFF66708A);
+                wuPill.setText(wuOn ? "ON" : "OFF");
+                wSub.setText(ttsOn
+                        ? (wuOn ? "Guides warm-up + 3..2..1 cooldown" : "Off \u00B7 skips straight to run")
+                        : "Turns Voice Coach ON automatically");
+                wuListTxt.setText(mv.size() + " MOVES  \u00B7  " + sumS + "S TOTAL");
+
+                metroCard.setBackgroundResource(metroOn ? R.drawable.badge_on : R.drawable.badge_off);
+                metroPill.setBackgroundResource(metroOn ? R.drawable.badge_on : R.drawable.badge_off);
+                metroPill.setTextColor(metroOn ? 0xFF00B4D8 : 0xFF66708A);
+                metroPill.setText(metroOn ? "ON" : "OFF");
+                spmVal.setText(spm + "  SPM");
+                spmVal.setTextColor(metroOn ? 0xFF00B4D8 : 0xFF8A94A6);
+
+                mapCard.setBackgroundResource(mapOn ? R.drawable.badge_on : R.drawable.badge_off);
+                mapPill.setBackgroundResource(mapOn ? R.drawable.badge_on : R.drawable.badge_off);
+                mapPill.setTextColor(mapOn ? 0xFF00E5A0 : 0xFF66708A);
+                mapPill.setText(mp == null ? "EMPTY" : (mapOn ? "ON" : "OFF"));
+                if (mp == null) {
+                    mpSub.setText("Load .cmap file from Corvo Map Cutter (0 KB bloat)");
+                    mpImportBtn.setText("IMPORT .CMAP FILE");
+                    mpClearBtn.setVisibility(View.GONE);
+                } else {
+                    String sz = mp.fileBytes >= 1048576L
+                            ? String.format(Locale.US, "%.1f MB", mp.fileBytes / 1048576.0)
+                            : Math.max(1L, Math.round(mp.fileBytes / 1024.0)) + " KB";
+                    mpSub.setText(String.format(Locale.US, "%s \u00B7 %.0f\u00D7%.0fkm \u00B7 %s",
+                            mp.areaName, mp.widthKm(), mp.heightKm(), sz));
+                    mpImportBtn.setText("REPLACE .CMAP");
+                    mpClearBtn.setVisibility(View.VISIBLE);
+                }
+                renderCroSiteUi();
+            }
+        };
+        onRunSetupRefresh = syncUI;
+        syncUI.run();
+
+        View.OnClickListener flipTts = new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                boolean next = !prefs.getBoolean("coach_tts", false);
+                prefs.edit().putBoolean("coach_tts", next).apply();
+                if (tState != TS_IDLE && (CroSiteEngine.isEnabled(MainActivity.this)
+                        || prefs.getBoolean("coach_metro", false) || next)) {
+                    CroSiteService.dispatch(MainActivity.this, CroSiteService.ACT_SYNC_COACH);
+                }
+                syncUI.run();
+            }
+        };
+        vTop.setOnClickListener(flipTts);
+        ttsPill.setOnClickListener(flipTts);
+
+        wuPill.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (tState != TS_IDLE) {
+                    toast("Stop or reset timer to change warm-up");
+                    return;
+                }
+                boolean next = !prefs.getBoolean("coach_warmup_on", false);
+                SharedPreferences.Editor ed = prefs.edit().putBoolean("coach_warmup_on", next);
+                if (next && !prefs.getBoolean("coach_tts", false)) {
+                    ed.putBoolean("coach_tts", true);
+                }
+                ed.apply();
+                syncUI.run();
+            }
+        });
+        wEditBar.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openWarmupEditor();
+            }
+        });
+
+        View.OnClickListener flipMetro = new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                boolean next = !prefs.getBoolean("coach_metro", false);
+                prefs.edit().putBoolean("coach_metro", next).apply();
+                if (tState != TS_IDLE && (CroSiteEngine.isEnabled(MainActivity.this)
+                        || prefs.getBoolean("coach_tts", false) || next)) {
+                    CroSiteService.dispatch(MainActivity.this, CroSiteService.ACT_SYNC_COACH);
+                }
+                syncUI.run();
+            }
+        };
+        mTop.setOnClickListener(flipMetro);
+        metroPill.setOnClickListener(flipMetro);
+
+        spmMinus.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                int s = Math.max(140, prefs.getInt("coach_metro_spm", 172) - 2);
+                prefs.edit().putInt("coach_metro_spm", s).putBoolean("coach_metro", true).apply();
+                if (tState != TS_IDLE) CroSiteService.dispatch(MainActivity.this, CroSiteService.ACT_SYNC_COACH);
+                syncUI.run();
+            }
+        });
+        spmPlus.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                int s = Math.min(210, prefs.getInt("coach_metro_spm", 172) + 2);
+                prefs.edit().putInt("coach_metro_spm", s).putBoolean("coach_metro", true).apply();
+                if (tState != TS_IDLE) CroSiteService.dispatch(MainActivity.this, CroSiteService.ACT_SYNC_COACH);
+                syncUI.run();
+            }
+        });
+        spmVal.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final String[] labels = {"160 SPM \u00B7 EASY", "168 SPM \u00B7 CRUISE",
+                        "172 SPM \u00B7 PRO", "176 SPM \u00B7 FAST", "180 SPM \u00B7 TEMPO", "186 SPM \u00B7 SPEED"};
+                final int[] vals = {160, 168, 172, 176, 180, 186};
+                new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("CADENCE PRESET")
+                        .setItems(labels, new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface d, int w) {
+                                prefs.edit().putInt("coach_metro_spm", vals[w])
+                                        .putBoolean("coach_metro", true).apply();
+                                if (tState != TS_IDLE) CroSiteService.dispatch(MainActivity.this, CroSiteService.ACT_SYNC_COACH);
+                                syncUI.run();
+                            }
+                        }).show();
+            }
+        });
+
+        View.OnClickListener flipMap = new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (croMapPack == null) {
+                    doImportCmap();
+                    return;
+                }
+                boolean next = !prefs.getBoolean("map_show", true);
+                prefs.edit().putBoolean("map_show", next).apply();
+                syncUI.run();
+            }
+        };
+        mpTop.setOnClickListener(flipMap);
+        mapPill.setOnClickListener(flipMap);
+        mpImportBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                doImportCmap();
+            }
+        });
+        mpClearBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                CroMapPack.clear(MainActivity.this);
+                croMapPack = null;
+                if (croMapView != null) croMapView.setPack(null);
+                toast("Offline map removed");
+                syncUI.run();
+            }
+        });
+
+        android.widget.ScrollView sc = new android.widget.ScrollView(this);
+        sc.addView(root);
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setTitle("RUN SETUP")
+                .setView(sc)
+                .setPositiveButton("DONE", null)
+                .create();
+        dlg.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface d) {
+                onRunSetupRefresh = null;
+            }
+        });
+        dlg.show();
     }
 
     // ================= RENDER =================
@@ -2816,8 +4057,24 @@ public class MainActivity extends Activity {
         recNext.setText(next > 0 ? "NEXT \u00B7 " + next + " DAYS" : "ALL DONE \uD83D\uDD25");
 
 
-        // radar profile (always today's real profile)
+        // radar profile (ALL-TIME vs 14D FORM)
+        renderRadar();
+    }
+
+    private void renderRadar() {
+        if (radar == null) return;
         radar.setData(radarValues());
+        if (radAllBtn != null && rad14Btn != null) {
+            radAllBtn.setBackgroundResource(!radar14d ? R.drawable.badge_on : R.drawable.badge_off);
+            radAllBtn.setTextColor(!radar14d ? 0xFF00E5A0 : 0xFF66708A);
+            rad14Btn.setBackgroundResource(radar14d ? R.drawable.badge_on : R.drawable.badge_off);
+            rad14Btn.setTextColor(radar14d ? 0xFF00E5A0 : 0xFF66708A);
+        }
+        if (radSubTxt != null) {
+            radSubTxt.setText(radar14d
+                    ? "LAST 14 DAYS · PACE · DISTANCE · RHYTHM · STREAK · SCORE"
+                    : "ALL-TIME · PACE · DISTANCE · 30D RHYTHM · STREAK · SCORE");
+        }
     }
 
     private void setDelta(TextView tv, double d, String unit) {
@@ -2838,7 +4095,6 @@ public class MainActivity extends Activity {
     }
 
     private void renderHistory() {
-        countUp(histRunsBig, store.count(), 0, "");
         long lastExp = Math.max(prefs.getLong("lastExport", 0L),
                 prefs.getLong("lastAutoBackup", 0L));
         if (store.count() >= 3) {
@@ -2898,7 +4154,7 @@ public class MainActivity extends Activity {
                         store.isRestDay(r.d) ? View.VISIBLE : View.GONE);
                 ((TextView) row.findViewById(R.id.rKm))
                         .setText(String.format(Locale.US, "%.2f km", r.km));
-                ((TextView) row.findViewById(R.id.rTime)).setText(timeText(r.min) + calSuffix(r));
+                ((TextView) row.findViewById(R.id.rTime)).setText(timeText(r.min));
                 ((TextView) row.findViewById(R.id.rSpeed))
                         .setText(String.format(Locale.US, "%.1f", r.km / (r.min / 60.0)));
                 histList.addView(makeSwipeable(r, row));
@@ -2925,6 +4181,7 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.WRAP_CONTENT));
         content.setOnTouchListener(new View.OnTouchListener() {
             float downX = 0, downY = 0;
+            long downT = 0L;
             boolean horiz = false, decided = false;
 
             @Override
@@ -2933,6 +4190,7 @@ public class MainActivity extends Activity {
                     case MotionEvent.ACTION_DOWN:
                         downX = e.getX();
                         downY = e.getY();
+                        downT = e.getEventTime();
                         horiz = false;
                         decided = false;
                         return true;
@@ -2957,7 +4215,6 @@ public class MainActivity extends Activity {
                         }
                         return false;
                     case MotionEvent.ACTION_UP:
-                    case MotionEvent.ACTION_CANCEL:
                         if (horiz) {
                             if (e.getX() - downX > 80f) {
                                 String title = store.togglePin(r.d);
@@ -2965,6 +4222,20 @@ public class MainActivity extends Activity {
                                 toast(title.length() > 0
                                         ? "PINNED \u2B50 " + title : "UNPINNED");
                             }
+                            v.animate().translationX(0).setDuration(150).start();
+                            star.animate().alpha(0).setDuration(150).start();
+                            horiz = false;
+                            return true;
+                        }
+                        if (!decided && Math.abs(e.getX() - downX) < dp(12)
+                                && Math.abs(e.getY() - downY) < dp(12)
+                                && (e.getEventTime() - downT) < 450L) {
+                            openRunDetail(r);
+                            return true;
+                        }
+                        return false;
+                    case MotionEvent.ACTION_CANCEL:
+                        if (horiz) {
                             v.animate().translationX(0).setDuration(150).start();
                             star.animate().alpha(0).setDuration(150).start();
                             horiz = false;
@@ -2978,11 +4249,176 @@ public class MainActivity extends Activity {
         return wrap;
     }
 
-    private String calSuffix(RunStore.Run r) {
+    private void openRunDetail(final RunStore.Run r) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(10), dp(20), dp(10));
+
+        // Top tags (rest / pin / mood)
+        StringBuilder tag = new StringBuilder();
+        if (store.isRestDay(r.d)) tag.append("REST DAY RUN");
+        if (r.pin != null && r.pin.length() > 0) {
+            if (tag.length() > 0) tag.append("  \u00B7  ");
+            tag.append("\u2B50 ").append(r.pin);
+        }
+        if (tag.length() > 0) {
+            TextView tg = new TextView(this);
+            tg.setText(tag.toString());
+            tg.setTextSize(10);
+            tg.setTypeface(Typeface.DEFAULT_BOLD);
+            tg.setLetterSpacing(0.12f);
+            tg.setTextColor(0xFFFFB454);
+            box.addView(tg);
+        }
+
+        // 2x2 clean stat tiles (dead-centered numbers + labels, zero column squeeze)
+        LinearLayout r1 = new LinearLayout(this);
+        r1.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams r1Lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        r1Lp.topMargin = dp(8);
+        addDetailTile(r1, fmtKm(r.km), "KM", 0xFF00E5A0, 0);
+        addDetailTile(r1, timeText(r.min), "TIME", 0xFFF2F5FA, dp(8));
+        box.addView(r1, r1Lp);
+
+        LinearLayout r2 = new LinearLayout(this);
+        r2.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams r2Lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        r2Lp.topMargin = dp(8);
+        addDetailTile(r2, paceText(r.min / r.km), "MIN/KM", 0xFFF2F5FA, 0);
+        addDetailTile(r2, String.format(Locale.US, "%.1f", r.km / (r.min / 60.0)), "KM/H", 0xFF00B4D8, dp(8));
+        box.addView(r2, r2Lp);
+
+        int sc = store.scoreOf(r.d);
+        if (sc > 0) detailRow(box, "RUN SCORE", sc + " / 100", 0xFF00E5A0);
         double cal = store.calOf(r);
-        String c = cal > 0 ? " \u00B7 " + String.format(Locale.US, "%.0f CAL", cal) : "";
-        String b = r.bpm > 0 ? " \u00B7 " + r.bpm + " BPM" : "";
-        return c + b;
+        if (cal > 0) detailRow(box, "CALORIES (EST)", Math.round(cal) + " kcal", 0xFFF2F5FA);
+        if (r.cadence > 0) detailRow(box, "AVG CADENCE", r.cadence + " SPM", 0xFF00B4D8);
+        if (r.outPace > 0 && r.backPace > 0) {
+            detailRow(box, "OUT / BACK SPLIT",
+                    paceText(r.outPace) + "  /  " + paceText(r.backPace) + " /km", 0xFFF2F5FA);
+        }
+        if (r.bpm > 0) detailRow(box, "POST-RUN PULSE", r.bpm + " BPM", 0xFFFFB454);
+        if (r.hrr60 > 0) detailRow(box, "HRR-60 RECOVERY", "\u2212" + r.hrr60 + " BPM", 0xFF00E5A0);
+        if (r.m1 >= 0 || r.m2 >= 0) {
+            String mTxt = (r.m1 >= 0 ? MOOD_PRE[r.m1] + " " + MOOD_PRE_WORDS[r.m1] : "\u2014")
+                    + "  \u2192  "
+                    + (r.m2 >= 0 ? MOOD_POST[r.m2] + " " + MOOD_POST_WORDS[r.m2] : "\u2014");
+            detailRow(box, "MOOD", mTxt, 0xFFF2F5FA);
+        }
+        if (r.laps != null && r.laps.length > 0) {
+            StringBuilder lSb = new StringBuilder();
+            for (int i = 0; i < r.laps.length; i++) {
+                if (i > 0) lSb.append("  \u00B7  ");
+                lSb.append("#").append(i + 1).append(" ").append(timeText(r.laps[i]));
+            }
+            detailRow(box, "LAPS (" + r.laps.length + ")", lSb.toString(), 0xFF8A94A6);
+        }
+
+        android.widget.ScrollView scv = new android.widget.ScrollView(this);
+        scv.addView(box);
+        final boolean pinned = r.pin != null && r.pin.length() > 0;
+        new AlertDialog.Builder(this)
+                .setTitle(RunStore.pretty(r.d))
+                .setView(scv)
+                .setPositiveButton("SHARE CARD", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        shareDayCard(r.d);
+                    }
+                })
+                .setNeutralButton(pinned ? "UNPIN" : "PIN \u2B50", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        String title = store.togglePin(r.d);
+                        render();
+                        toast(title.length() > 0 ? "PINNED \u2B50 " + title : "UNPINNED");
+                    }
+                })
+                .setNegativeButton("DELETE", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        new AlertDialog.Builder(MainActivity.this)
+                                .setTitle("DELETE THIS RUN?")
+                                .setMessage("Remove " + RunStore.pretty(r.d) + " (" + fmtKm(r.km) + " km) permanently?")
+                                .setPositiveButton("DELETE", new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface d2, int w2) {
+                                        store.remove(r.d);
+                                        render();
+                                        toast("Run deleted");
+                                    }
+                                })
+                                .setNegativeButton("CANCEL", null)
+                                .show();
+                    }
+                })
+                .show();
+    }
+
+    private void addDetailTile(LinearLayout row, String val, String lbl, int valCol, int leftMarginPx) {
+        LinearLayout tile = new LinearLayout(this);
+        tile.setOrientation(LinearLayout.VERTICAL);
+        tile.setGravity(Gravity.CENTER);
+        tile.setBackgroundResource(isAmoled() ? R.drawable.tile_bg_a : R.drawable.tile_bg);
+        tile.setPadding(dp(10), dp(12), dp(10), dp(12));
+
+        TextView vTv = new TextView(this);
+        vTv.setText(val);
+        vTv.setTextSize(17);
+        vTv.setTypeface(Typeface.DEFAULT_BOLD);
+        vTv.setTextColor(valCol);
+        vTv.setSingleLine(true);
+        vTv.setGravity(Gravity.CENTER);
+
+        TextView lTv = new TextView(this);
+        lTv.setText(lbl);
+        lTv.setTextSize(9);
+        lTv.setLetterSpacing(0.15f);
+        lTv.setTextColor(0xFF66708A);
+        lTv.setSingleLine(true);
+        lTv.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        llp.topMargin = dp(3);
+
+        tile.addView(vTv);
+        tile.addView(lTv, llp);
+
+        LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        tLp.leftMargin = leftMarginPx;
+        row.addView(tile, tLp);
+    }
+
+    private void detailRow(LinearLayout parent, String k, String v, int vCol) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(10);
+
+        TextView kt = new TextView(this);
+        kt.setText(k);
+        kt.setTextSize(10);
+        kt.setLetterSpacing(0.12f);
+        kt.setTextColor(0xFF66708A);
+
+        TextView vt = new TextView(this);
+        vt.setText(v);
+        vt.setTextSize(12);
+        vt.setTypeface(Typeface.DEFAULT_BOLD);
+        vt.setTextColor(vCol);
+        vt.setGravity(Gravity.RIGHT);
+
+        LinearLayout.LayoutParams kLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        kLp.rightMargin = dp(12);
+        row.addView(kt, kLp);
+        row.addView(vt, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        parent.addView(row, lp);
     }
 
     // ================= CATEGORY (THE CROW) =================
@@ -3103,6 +4539,15 @@ public class MainActivity extends Activity {
     }
 
     private double[] radarValues() {
+        if (radar14d) {
+            double pace14 = store.paceLast14();
+            double paceV = pace14 <= 0 ? 0 : clamp01((8.5 - pace14) / 4.5);
+            double distV = clamp01(Math.sqrt(store.kmLast14() / 70.0));
+            double rhythmV = clamp01(store.runDaysLast14() / 14.0);
+            double streakV = clamp01(store.currentStreak() / 30.0);
+            double scoreV = clamp01(store.avgScoreLast14() / 100.0);
+            return new double[]{paceV, distV, rhythmV, streakV, scoreV};
+        }
         double pace = store.avgPace();
         double paceV = pace <= 0 ? 0 : clamp01((8.5 - pace) / 4.5);
         double distV = clamp01(Math.sqrt(store.totalKm() / 500.0));
@@ -3460,7 +4905,8 @@ public class MainActivity extends Activity {
         p.setFakeBoldText(false);
         p.setColor(0xFF66708A);
         p.setTextSize(30);
-        c.drawText("RUNNER PROFILE \u00B7 " + RunStore.shortDate(RunStore.today()), 84, 214, p);
+        c.drawText((radar14d ? "14D FORM PROFILE \u00B7 " : "RUNNER PROFILE \u00B7 ")
+                + RunStore.shortDate(RunStore.today()), 84, 214, p);
 
         RadarView.drawRadar(c, W / 2f, 640, 330, radarValues(), 34, 7);
 
@@ -3629,8 +5075,18 @@ public class MainActivity extends Activity {
             yy += 46;
         }
         p.setColor(0xFF8A94A6);
-        c.drawText(String.format(Locale.US, "AVG SPEED %.1f KM/H", r.km / (r.min / 60.0)), 84, yy, p);
+        String spd = String.format(Locale.US, "AVG SPEED %.1f KM/H", r.km / (r.min / 60.0))
+                + (r.cadence > 0 ? " \u00B7 " + r.cadence + " SPM" : "")
+                + (r.hrr60 > 0 ? " \u00B7 HRR \u2212" + r.hrr60 : "");
+        c.drawText(spd, 84, yy, p);
         yy += 46;
+        if (r.outPace > 0 && r.backPace > 0) {
+            p.setColor(r.backPace < r.outPace ? 0xFF00E5A0 : 0xFF00B4D8);
+            c.drawText("OUT " + paceText(r.outPace) + "/KM \u00B7 BACK " + paceText(r.backPace) + "/KM"
+                    + (r.backPace < r.outPace ? " \u00B7 NEGATIVE SPLIT" : ""), 84, yy, p);
+            yy += 46;
+        }
+        p.setColor(0xFF8A94A6);
         String city = safeStr("city");
         if (city.length() > 0) {
             c.drawText("IN " + city, 84, yy, p);
@@ -3863,11 +5319,70 @@ public class MainActivity extends Activity {
         startActivityForResult(i, REQ_IMPORT);
     }
 
+    private void doImportCmap() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        startActivityForResult(i, REQ_IMPORT_CMAP);
+    }
+
+    private void loadSavedMapAsync() {
+        if (!CroMapPack.exists(this)) return;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final CroMapPack loaded = CroMapPack.loadSaved(MainActivity.this);
+                if (loaded != null) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            croMapPack = loaded;
+                            if (croMapView != null) croMapView.setPack(loaded);
+                            renderCroSiteUi();
+                            if (onRunSetupRefresh != null) onRunSetupRefresh.run();
+                        }
+                    });
+                }
+            }
+        }).start();
+    }
+
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
         if (res != RESULT_OK || data == null || data.getData() == null) return;
-        Uri u = data.getData();
+        final Uri u = data.getData();
+        if (req == REQ_IMPORT_CMAP) {
+            toast("Loading offline map...");
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        final CroMapPack loaded = CroMapPack.importFromUri(MainActivity.this, u);
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                croMapPack = loaded;
+                                prefs.edit().putBoolean("map_show", true).apply();
+                                if (croMapView != null) croMapView.setPack(loaded);
+                                long kb = Math.max(1L, Math.round(loaded.fileBytes / 1024.0));
+                                toast("Loaded " + loaded.areaName + " (" + kb + " KB) \u2713");
+                                renderCroSiteUi();
+                                if (onRunSetupRefresh != null) onRunSetupRefresh.run();
+                            }
+                        });
+                    } catch (final Exception e) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                toast("Invalid .cmap file: " + (e.getMessage() != null ? e.getMessage() : "failed"));
+                            }
+                        });
+                    }
+                }
+            }).start();
+            return;
+        }
         if (req == REQ_EXPORT) {
             OutputStream os = null;
             try {

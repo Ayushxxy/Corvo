@@ -24,7 +24,11 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -44,6 +48,8 @@ public class ToolsUI {
     private static final int TOOL_BF = 3;
     private static final int TOOL_PACE = 4;
     private static final int TOOL_WATER = 5;
+    private static final int TOOL_VO2 = 6;
+    private static final int TOOL_BOLT = 7;
 
     private final Activity act;
     private final RunStore store;
@@ -51,9 +57,18 @@ public class ToolsUI {
     private final Host host;
     private final LinearLayout container;
 
+    private static final String[] TOOL_TITLES = {
+            "CAMERA PULSE", "STRENGTH LEVEL", "BMI", "BODY FAT %",
+            "PACE & SPLIT", "HYDRATION", "VO2 MAX & ZONES", "BOLT BREATH"
+    };
+    private static final String[] TOOL_SHORT = {
+            "PULSE", "STRENGTH", "BMI", "BODY FAT",
+            "PACE", "HYDRATION", "VO2 MAX", "BOLT"
+    };
+
     private int activeTool = TOOL_NONE;
 
-    // Camera Pulse PPG state (v4.1)
+    // Camera Pulse PPG + HRV + HRR-60 state (v5.0)
     private PulseCameraController pulseCam;
     private PulseWaveView pulseWave;
     private TextureView pulseTex;
@@ -63,14 +78,60 @@ public class ToolsUI {
     private LinearLayout pulseLogBox;
     private String pulseTag = "RESTING";
     private int lastMeasuredBpm = 0;
+    private double lastMeasuredHrv = 0.0;
+    private int lastHrrDrop = 0;
     private String lastMeasureNote = "TAP START & COVER REAR CAMERA + FLASH LIGHTLY";
     private boolean pendingCamStart = false;
+    private int hrrPhase = 0; // 0=idle, 1=peak HR0 (12s), 2=36s rest wait, 3=recovery HR60 (12s)
+    private int hrrPeakBpm = 0;
+    private long hrrWaitUntil = 0L;
+    private final Runnable hrrTick = new Runnable() {
+        @Override
+        public void run() {
+            if (hrrPhase != 2) return;
+            long leftMs = hrrWaitUntil - System.currentTimeMillis();
+            if (leftMs <= 0L) {
+                hrrPhase = 3;
+                if (pulseStatusTv != null) {
+                    pulseStatusTv.setText("PLACE FINGER LIGHTLY \u00B7 MEASURING HR-60...");
+                    pulseStatusTv.setTextColor(0xFF00E5A0);
+                }
+                startPulseCamInternal(12000L);
+                return;
+            }
+            int s = (int) Math.ceil(leftMs / 1000.0);
+            if (pulseStatusTv != null) {
+                pulseStatusTv.setText("BREATHE CALMLY \u00B7 PEAK " + hrrPeakBpm + " BPM \u00B7 SCAN 2 IN " + s + "s");
+                pulseStatusTv.setTextColor(0xFF00B4D8);
+            }
+            if (pulseProgFill != null && pulseProgFill.getParent() instanceof View) {
+                int pw = ((View) pulseProgFill.getParent()).getWidth();
+                if (pw > 0) {
+                    pulseProgFill.getLayoutParams().width = Math.round(pw * Math.max(0f, Math.min(1f, (36000L - leftMs) / 36000f)));
+                    pulseProgFill.requestLayout();
+                }
+            }
+            hand.postDelayed(this, 250L);
+        }
+    };
 
     // Live Plank timer inside Strength Level Part B
     private boolean plankRunning = false;
     private long plankStartMs = 0L;
     private TextView plankTimeTv;
     private Button plankBtn;
+    // BOLT Breath Lab state (v5.0)
+    private boolean boltRunning = false;
+    private long boltStartMs = 0L;
+    private TextView boltTimeTv;
+    private Button boltBtn;
+    private boolean paceBreathRunning = false;
+    private long paceBreathStartMs = 0L;
+    private View paceBreathBar;
+    private int paceBreathBarMaxW = 0;
+    private TextView paceBreathPhaseTv;
+    private Button paceBreathBtn;
+
     private final Handler hand = new Handler(Looper.getMainLooper());
     private final Runnable plankTick = new Runnable() {
         @Override
@@ -79,6 +140,37 @@ public class ToolsUI {
             long sec = Math.max(0L, (System.currentTimeMillis() - plankStartMs) / 1000L);
             plankTimeTv.setText(fmtClockSec((int) sec));
             hand.postDelayed(this, 250L);
+        }
+    };
+    private final Runnable boltTick = new Runnable() {
+        @Override
+        public void run() {
+            if (boltRunning && boltTimeTv != null) {
+                double sec = Math.max(0.0, (System.currentTimeMillis() - boltStartMs) / 1000.0);
+                boltTimeTv.setText(String.format(Locale.US, "%.1f s", sec));
+            }
+            if (paceBreathRunning && paceBreathPhaseTv != null && paceBreathBar != null) {
+                long el = (System.currentTimeMillis() - paceBreathStartMs) % 10000L;
+                float frac;
+                if (el < 4000L) {
+                    frac = el / 4000f;
+                    paceBreathPhaseTv.setText("INHALE SLOWLY · " + ((4000L - el) / 1000L + 1) + "s");
+                    paceBreathPhaseTv.setTextColor(0xFF00E5A0);
+                } else {
+                    frac = 1f - ((el - 4000L) / 6000f);
+                    paceBreathPhaseTv.setText("EXHALE RELAXED · " + ((10000L - el) / 1000L + 1) + "s");
+                    paceBreathPhaseTv.setTextColor(0xFF00B4D8);
+                }
+                if (paceBreathBarMaxW <= 0 && paceBreathBar.getParent() instanceof View) {
+                    paceBreathBarMaxW = ((View) paceBreathBar.getParent()).getWidth();
+                }
+                if (paceBreathBarMaxW > 0) {
+                    android.view.ViewGroup.LayoutParams lp = paceBreathBar.getLayoutParams();
+                    lp.width = Math.max(dp(6), Math.round(paceBreathBarMaxW * Math.max(0.03f, Math.min(1f, frac))));
+                    paceBreathBar.setLayoutParams(lp);
+                }
+            }
+            if (boltRunning || paceBreathRunning) hand.postDelayed(this, 60L);
         }
     };
 
@@ -97,6 +189,7 @@ public class ToolsUI {
     public boolean handleBack() {
         if (activeTool != TOOL_NONE) {
             stopPlankIfRunning(false);
+            stopBoltIfRunning();
             stopPulseCam();
             activeTool = TOOL_NONE;
             render();
@@ -107,16 +200,39 @@ public class ToolsUI {
 
     public void onTabHidden() {
         stopPlankIfRunning(false);
+        stopBoltIfRunning();
         stopPulseCam();
+    }
+
+    private void stopBoltIfRunning() {
+        boltRunning = false;
+        paceBreathRunning = false;
+        hand.removeCallbacks(boltTick);
     }
 
     public void openPulsePostRun() {
         stopPlankIfRunning(false);
+        stopBoltIfRunning();
         stopPulseCam();
         activeTool = TOOL_PULSE;
         pulseTag = "POST-RUN";
         lastMeasuredBpm = 0;
+        lastMeasuredHrv = 0.0;
+        lastHrrDrop = 0;
         lastMeasureNote = "READY \u00B7 TAP START TO MEASURE POST-RUN BPM";
+        render();
+    }
+
+    public void openPulseHrr60() {
+        stopPlankIfRunning(false);
+        stopBoltIfRunning();
+        stopPulseCam();
+        activeTool = TOOL_PULSE;
+        pulseTag = "HRR-60";
+        lastMeasuredBpm = 0;
+        lastMeasuredHrv = 0.0;
+        lastHrrDrop = 0;
+        lastMeasureNote = "READY \u00B7 12S PEAK BPM \u2192 36S CALM REST \u2192 12S RECOVERY BPM";
         render();
     }
 
@@ -146,11 +262,13 @@ public class ToolsUI {
                 case TOOL_BF: renderBodyFatDetail(); break;
                 case TOOL_PACE: renderPaceDetail(); break;
                 case TOOL_WATER: renderHydrationDetail(); break;
+                case TOOL_VO2: renderVo2Detail(); break;
+                case TOOL_BOLT: renderBoltDetail(); break;
             }
         }
     }
 
-    // ================= 2x3 GYMMANE-STYLE GRAPHIC GRID =================
+    // ================= 2x4 TOOLS PERFORMANCE GRID =================
 
     private void renderGrid() {
         // Header
@@ -169,7 +287,7 @@ public class ToolsUI {
         tlp.leftMargin = dp(8);
         hdr.addView(title, tlp);
         TextView sub = new TextView(act);
-        sub.setText("6 BUILT-IN ENGINES");
+        sub.setText("8 BUILT-IN ENGINES");
         sub.setTextSize(9);
         sub.setLetterSpacing(0.15f);
         sub.setTextColor(0xFF4A5268);
@@ -194,10 +312,16 @@ public class ToolsUI {
         double waterL = computeWaterLiters()[0];
         String waterBadge = String.format(Locale.US, "%.1f L", waterL);
 
-        // 3 rows x 2 cards
+        double vo2 = computeVo2Max();
+        String vo2Badge = vo2 > 0 ? String.format(Locale.US, "%.1f", vo2) : "RUN 12M";
+
+        int lastBolt = latestBoltSec();
+        String boltBadge = lastBolt > 0 ? lastBolt + "s" : "TEST";
+
+        // 4 rows x 2 cards (keep original 6 tools in rows 1-3, VO2 & BOLT last)
         addCardRow(
                 makeToolCard(TOOL_PULSE, R.drawable.ic_tool_pulse, 0xFFFF5C5C,
-                        "CAMERA PULSE", "15s Finger Heart Rate", pulseBadge,
+                        "CAMERA PULSE", "BPM · HRV · HRR-60", pulseBadge,
                         pLog.isEmpty() ? 0xFFFF5C5C : 0xFF00E5A0),
                 makeToolCard(TOOL_STRENGTH, R.drawable.ic_tool_strength, 0xFF00E5A0,
                         "STRENGTH LEVEL", "Cardio + Bodyweight", strBadge, 0xFF00E5A0)
@@ -213,6 +337,12 @@ public class ToolsUI {
                         "PACE & SPLIT", "Target Pace & Splits", paceBadge, 0xFF00E5A0),
                 makeToolCard(TOOL_WATER, R.drawable.ic_tool_water, 0xFF00B4D8,
                         "HYDRATION", "Daily + Run Target", waterBadge, 0xFF00B4D8)
+        );
+        addCardRow(
+                makeToolCard(TOOL_VO2, R.drawable.ic_tool_vo2, 0xFF00E5A0,
+                        "VO2 MAX & ZONES", "5 Pace Zones + Races", vo2Badge, vo2 > 0 ? 0xFF00E5A0 : 0xFF8A94A6),
+                makeToolCard(TOOL_BOLT, R.drawable.ic_tool_bolt, 0xFF00B4D8,
+                        "BOLT BREATH", "CO2 Score & Pacer", boltBadge, lastBolt > 0 ? 0xFF00B4D8 : 0xFF8A94A6)
         );
 
         TextView foot = new TextView(act);
@@ -318,15 +448,30 @@ public class ToolsUI {
         return card;
     }
 
+    public void stepTool(int delta) {
+        if (activeTool == TOOL_NONE) return;
+        stopPlankIfRunning(false);
+        stopBoltIfRunning();
+        stopPulseCam();
+        activeTool = (activeTool + delta + 8) % 8;
+        render();
+        if (container != null) {
+            container.setTranslationX(delta > 0 ? dp(22) : -dp(22));
+            container.setAlpha(0.45f);
+            container.animate().translationX(0f).alpha(1f).setDuration(150L).start();
+        }
+    }
+
     private void renderDetailHeader() {
         LinearLayout row = new LinearLayout(act);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
+
         TextView back = new TextView(act);
         back.setText("\u2190  TOOLS");
-        back.setTextSize(12);
+        back.setTextSize(11);
         back.setTypeface(Typeface.DEFAULT_BOLD);
-        back.setLetterSpacing(0.15f);
+        back.setLetterSpacing(0.14f);
         back.setTextColor(0xFF00E5A0);
         back.setPadding(dp(12), dp(8), dp(14), dp(8));
         back.setBackgroundResource(attrRes(R.attr.inputBg));
@@ -337,13 +482,75 @@ public class ToolsUI {
             }
         });
         row.addView(back);
+
+        View sp = new View(act);
+        row.addView(sp, new LinearLayout.LayoutParams(0, 1, 1f));
+
+        TextView curTitle = new TextView(act);
+        curTitle.setText(activeTool >= 0 && activeTool < TOOL_TITLES.length ? TOOL_TITLES[activeTool] : "");
+        curTitle.setTextSize(11);
+        curTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        curTitle.setLetterSpacing(0.14f);
+        curTitle.setTextColor(0xFFF2F5FA);
+        row.addView(curTitle);
         container.addView(row);
+
+        // Slim prev / index / next switcher bar (tap OR swipe left/right anywhere)
+        int prevIdx = (activeTool + 7) % 8;
+        int nextIdx = (activeTool + 1) % 8;
+        LinearLayout nav = new LinearLayout(act);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        nlp.topMargin = dp(8);
+
+        TextView prevBtn = new TextView(act);
+        prevBtn.setText("\u2039  " + TOOL_SHORT[prevIdx]);
+        prevBtn.setTextSize(10);
+        prevBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        prevBtn.setLetterSpacing(0.08f);
+        prevBtn.setTextColor(0xFF8A94A6);
+        prevBtn.setPadding(dp(4), dp(4), dp(8), dp(4));
+        prevBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                stepTool(-1);
+            }
+        });
+        nav.addView(prevBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView idxTv = new TextView(act);
+        idxTv.setText((activeTool + 1) + " / 8  \u00B7  SWIPE");
+        idxTv.setTextSize(9);
+        idxTv.setLetterSpacing(0.14f);
+        idxTv.setTextColor(0xFF4A5268);
+        idxTv.setGravity(Gravity.CENTER);
+        nav.addView(idxTv);
+
+        TextView nextBtn = new TextView(act);
+        nextBtn.setText(TOOL_SHORT[nextIdx] + "  \u203A");
+        nextBtn.setTextSize(10);
+        nextBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        nextBtn.setLetterSpacing(0.08f);
+        nextBtn.setTextColor(0xFF8A94A6);
+        nextBtn.setGravity(Gravity.RIGHT);
+        nextBtn.setPadding(dp(8), dp(4), dp(4), dp(4));
+        nextBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                stepTool(1);
+            }
+        });
+        nav.addView(nextBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        container.addView(nav, nlp);
     }
 
     // ================= 1. CAMERA PULSE (CAMERA2 + FLASH PPG + PULSE LOG) =================
 
     private void renderPulseDetail() {
-        boolean running = pulseCam != null && pulseCam.isRunning();
+        boolean running = (pulseCam != null && pulseCam.isRunning()) || hrrPhase != 0;
 
         LinearLayout hero = makeCard(dp(14));
         LinearLayout top = new LinearLayout(act);
@@ -352,9 +559,13 @@ public class ToolsUI {
 
         LinearLayout titleCol = new LinearLayout(act);
         titleCol.setOrientation(LinearLayout.VERTICAL);
-        titleCol.addView(label("CAMERA PULSE · OPTICAL PPG", 0xFFFF5C5C));
-        pulseBpmTv = bigHero(lastMeasuredBpm > 0 ? lastMeasuredBpm + " BPM" : "\u2014",
-                lastMeasuredBpm > 0 ? 0xFF00E5A0 : 0xFFF2F5FA);
+        titleCol.addView(label("CAMERA PULSE · BPM · HRV · HRR-60", 0xFFFF5C5C));
+        String heroTxt = lastHrrDrop > 0
+                ? "\u2212" + lastHrrDrop + " HRR"
+                : (lastMeasuredBpm > 0
+                        ? lastMeasuredBpm + " BPM" + (lastMeasuredHrv >= 5.0 ? " · " + Math.round(lastMeasuredHrv) + "ms" : "")
+                        : "\u2014");
+        pulseBpmTv = bigHero(heroTxt, lastMeasuredBpm > 0 || lastHrrDrop > 0 ? 0xFF00E5A0 : 0xFFF2F5FA);
         titleCol.addView(pulseBpmTv);
         top.addView(titleCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -399,31 +610,42 @@ public class ToolsUI {
         waveLp.topMargin = dp(12);
         hero.addView(pulseWave, waveLp);
 
-        // Context tag pills
+        // Context tag pills: RESTING (15s), HRV (25s), POST-RUN (15s), HRR-60 (60s recovery drop)
         LinearLayout tagRow = new LinearLayout(act);
         tagRow.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams trLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         trLp.topMargin = dp(12);
-        final String[] tags = {"RESTING", "POST-RUN", "CHECK"};
+        final String[] tags = {"RESTING", "HRV", "POST-RUN", "HRR-60"};
         for (int i = 0; i < tags.length; i++) {
             final String tg = tags[i];
             TextView pill = pillToggle(tg, tg.equals(pulseTag), new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     pulseTag = tg;
-                    if (pulseCam == null || !pulseCam.isRunning()) render();
+                    if (!running) {
+                        if ("HRV".equals(tg)) lastMeasureNote = "25S MORNING READINESS SCAN (RMSSD MS)";
+                        else if ("HRR-60".equals(tg)) lastMeasureNote = "12S PEAK BPM \u2192 36S CALM REST \u2192 12S RECOVERY BPM";
+                        else lastMeasureNote = "TAP START & COVER REAR CAMERA + FLASH LIGHTLY";
+                        render();
+                    }
                 }
             });
+            pill.setTextSize(9.5f);
+            pill.setLetterSpacing(0.04f);
+            pill.setMaxLines(1);
             LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(0, dp(34), 1f);
-            if (i > 0) pLp.leftMargin = dp(6);
+            if (i > 0) pLp.leftMargin = dp(5);
             tagRow.addView(pill, pLp);
         }
         hero.addView(tagRow, trLp);
 
         // Start / Stop button
         pulseBtn = new Button(act);
-        pulseBtn.setText(running ? "STOP SCAN" : "START 15S PULSE");
+        String btnLabel = running ? "STOP SCAN"
+                : ("HRV".equals(pulseTag) ? "START 25S HRV"
+                        : ("HRR-60".equals(pulseTag) ? "START HRR-60 TEST" : "START 15S PULSE"));
+        pulseBtn.setText(btnLabel);
         pulseBtn.setTextSize(13);
         pulseBtn.setTypeface(Typeface.DEFAULT_BOLD);
         pulseBtn.setLetterSpacing(0.12f);
@@ -436,7 +658,8 @@ public class ToolsUI {
         pulseBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (pulseCam != null && pulseCam.isRunning()) {
+                boolean activeNow = (pulseCam != null && pulseCam.isRunning()) || hrrPhase != 0;
+                if (activeNow) {
                     stopPulseCam();
                     lastMeasureNote = "SCAN STOPPED \u00B7 TAP START TO MEASURE";
                     render();
@@ -457,13 +680,16 @@ public class ToolsUI {
         // PULSE LOG CARD (Stored right inside Pulse in TOOLS)
         LinearLayout logCard = makeCard(dp(12));
         int restAvg = PulseEngine.restingBpm(prefs);
+        double hrvBase = PulseEngine.baselineHrv(prefs);
         LinearLayout lh = new LinearLayout(act);
         lh.setOrientation(LinearLayout.HORIZONTAL);
         lh.setGravity(Gravity.CENTER_VERTICAL);
         lh.addView(label("PULSE LOG", 0xFF8A94A6), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        if (restAvg > 0) {
-            TextView rTv = label("REST AVG · " + restAvg + " BPM", 0xFF00E5A0);
-            lh.addView(rTv);
+        if (restAvg > 0 || hrvBase >= 5.0) {
+            String summary = (restAvg > 0 ? "REST " + restAvg + " BPM" : "")
+                    + (restAvg > 0 && hrvBase >= 5.0 ? " · " : "")
+                    + (hrvBase >= 5.0 ? "HRV " + Math.round(hrvBase) + "ms" : "");
+            lh.addView(label(summary, 0xFF00E5A0));
         }
         logCard.addView(lh);
         pulseLogBox = new LinearLayout(act);
@@ -496,12 +722,13 @@ public class ToolsUI {
             bpmTv.setText(e.bpm + " BPM");
             bpmTv.setTextSize(15);
             bpmTv.setTypeface(Typeface.DEFAULT_BOLD);
-            bpmTv.setTextColor("RESTING".equals(e.tag) ? 0xFF00E5A0
+            bpmTv.setTextColor(("RESTING".equals(e.tag) || "HRV".equals(e.tag)) ? 0xFF00E5A0
                     : ("POST-RUN".equals(e.tag) ? 0xFFFFB454 : 0xFF00B4D8));
             bpmTv.setWidth(dp(82));
 
             TextView meta = new TextView(act);
-            meta.setText(e.tag + "  \u00B7  " + tf.format(new Date(e.ts)).toUpperCase(Locale.US));
+            String hrvTxt = e.hrvMs >= 5.0 ? " · HRV " + Math.round(e.hrvMs) + "ms" : "";
+            meta.setText(e.tag + hrvTxt + "  \u00B7  " + tf.format(new Date(e.ts)).toUpperCase(Locale.US));
             meta.setTextSize(10);
             meta.setTextColor(0xFF8A94A6);
             row.addView(bpmTv);
@@ -526,10 +753,25 @@ public class ToolsUI {
     }
 
     private void startPulseCam() {
-        if (pulseTex == null) return;
         stopPulseCam();
         lastMeasuredBpm = 0;
-        if (pulseBpmTv != null) {
+        lastMeasuredHrv = 0.0;
+        lastHrrDrop = 0;
+        if ("HRR-60".equals(pulseTag)) {
+            hrrPhase = 1;
+            hrrPeakBpm = 0;
+            startPulseCamInternal(12000L);
+        } else if ("HRV".equals(pulseTag)) {
+            startPulseCamInternal(25000L);
+        } else {
+            startPulseCamInternal(15000L);
+        }
+    }
+
+    private void startPulseCamInternal(long durationMs) {
+        if (pulseTex == null) return;
+        if (pulseCam != null) { pulseCam.stop(); pulseCam = null; }
+        if (pulseBpmTv != null && hrrPhase != 3) {
             pulseBpmTv.setText("\u2014");
             pulseBpmTv.setTextColor(0xFFF2F5FA);
         }
@@ -539,7 +781,8 @@ public class ToolsUI {
         }
         if (pulseBtn != null) pulseBtn.setText("STOP SCAN");
         if (pulseStatusTv != null) {
-            pulseStatusTv.setText("STARTING FLASH & CAMERA...");
+            pulseStatusTv.setText(hrrPhase == 1 ? "HRR-60 PHASE 1 · MEASURING PEAK BPM..."
+                    : (hrrPhase == 3 ? "HRR-60 PHASE 2 · MEASURING 60S RECOVERY..." : "STARTING FLASH & CAMERA..."));
             pulseStatusTv.setTextColor(0xFFFFB454);
         }
 
@@ -569,19 +812,60 @@ public class ToolsUI {
 
             @Override
             public void onComplete(PulseEngine.PulseResult result) {
-                stopPulseCam();
+                if (pulseCam != null) { pulseCam.stop(); pulseCam = null; }
+                if (hrrPhase == 1) {
+                    if (result.locked) {
+                        hrrPeakBpm = result.bpm;
+                        hrrPhase = 2;
+                        hrrWaitUntil = System.currentTimeMillis() + 36000L;
+                        PulseEngine.saveReading(prefs, result.bpm, "POST-RUN");
+                        String td = RunStore.today();
+                        if (store.get(td) != null) store.setBpm(td, result.bpm);
+                        hand.removeCallbacks(hrrTick);
+                        hand.post(hrrTick);
+                        return;
+                    } else {
+                        hrrPhase = 0;
+                        lastMeasureNote = "Weak peak scan — hold gently and retry HRR-60";
+                        render();
+                        return;
+                    }
+                } else if (hrrPhase == 3) {
+                    hrrPhase = 0;
+                    if (result.locked) {
+                        int drop = Math.max(1, hrrPeakBpm - result.bpm);
+                        lastMeasuredBpm = result.bpm;
+                        lastHrrDrop = drop;
+                        String tier = drop >= 40 ? "ATHLETIC" : (drop >= 25 ? "FIT" : (drop >= 12 ? "NORMAL" : "TIRED"));
+                        lastMeasureNote = String.format(Locale.US, "HRR-60: \u2212%d BPM (%d \u2192 %d) · %s",
+                                drop, hrrPeakBpm, result.bpm, tier);
+                        PulseEngine.saveReading(prefs, result.bpm, "CHECK");
+                        String td = RunStore.today();
+                        if (store.get(td) != null) store.setHrr60(td, drop);
+                        if (host != null) host.onProfileChanged();
+                        Toast.makeText(act, "Saved HRR-60: -" + drop + " BPM \u2713", Toast.LENGTH_SHORT).show();
+                    } else {
+                        lastMeasureNote = "Weak 60s scan (peak was " + hrrPeakBpm + " BPM)";
+                    }
+                    render();
+                    return;
+                }
+
                 if (result.locked) {
                     lastMeasuredBpm = result.bpm;
-                    lastMeasureNote = "SAVED " + result.bpm + " BPM (" + pulseTag + ") \u00B7 " + result.note;
-                    PulseEngine.saveReading(prefs, result.bpm, pulseTag);
+                    lastMeasuredHrv = !"POST-RUN".equals(pulseTag) ? result.hrvMs : 0.0;
+                    String hrvMsg = lastMeasuredHrv >= 5.0 ? " · HRV " + Math.round(lastMeasuredHrv) + "ms" : "";
+                    lastMeasureNote = "SAVED " + result.bpm + " BPM" + hrvMsg + " (" + pulseTag + ")";
+                    PulseEngine.saveReading(prefs, result.bpm, pulseTag, lastMeasuredHrv);
                     if ("POST-RUN".equals(pulseTag)) {
                         String td = RunStore.today();
                         if (store.get(td) != null) store.setBpm(td, result.bpm);
                     }
                     if (host != null) host.onProfileChanged();
-                    Toast.makeText(act, "Saved " + result.bpm + " BPM \u2713", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(act, "Saved " + result.bpm + " BPM" + hrvMsg + " \u2713", Toast.LENGTH_SHORT).show();
                 } else {
                     lastMeasuredBpm = 0;
+                    lastMeasuredHrv = 0.0;
                     lastMeasureNote = result.note;
                     Toast.makeText(act, "Weak signal — retry gently", Toast.LENGTH_SHORT).show();
                 }
@@ -596,10 +880,12 @@ public class ToolsUI {
                 render();
             }
         });
-        pulseCam.start(pulseTex);
+        pulseCam.start(pulseTex, durationMs);
     }
 
     private void stopPulseCam() {
+        hrrPhase = 0;
+        hand.removeCallbacks(hrrTick);
         if (pulseCam != null) {
             pulseCam.stop();
             pulseCam = null;
@@ -893,8 +1179,7 @@ public class ToolsUI {
 
         addFloatStepperRow(inputs, "DISTANCE (KM)", String.format(Locale.US, "%.1f KM", km),
                 "pace_km", km, 0.5f, 0.5f, 100f, false);
-        addFloatStepperRow(inputs, "TARGET TIME", fmtClockSec((int) sec),
-                "pace_sec", sec, 30f, 30f, 36000f, false);
+        addClockStepperRow(inputs, "TARGET TIME", (int) sec, "pace_sec", 30, 30, 36000);
         container.addView(inputs);
 
         // Splits card
@@ -954,7 +1239,347 @@ public class ToolsUI {
         container.addView(brk);
     }
 
+    // ================= 7. VO2 MAX, PACE ZONES & RACE PREDICTOR =================
+
+    private void renderVo2Detail() {
+        double vo2 = computeVo2Max();
+        int restBpm = PulseEngine.restingBpm(prefs);
+        int hrr = store.latestHrr60();
+        int age = userAge();
+        RunStore.Run bestRun = store.bestRunForVo2();
+
+        LinearLayout hero = makeCard(dp(14));
+        hero.addView(label("CARDIO VO2 MAX & FITNESS AGE", 0xFF00E5A0));
+        if (vo2 > 0) {
+            int fitAge = fitnessAge(vo2, age);
+            String tier = vo2Tier(vo2);
+            hero.addView(bigHero(String.format(Locale.US, "%.1f", vo2), 0xFF00E5A0));
+            hero.addView(subText("ML/KG/MIN   ·   " + tier + "   ·   FITNESS AGE " + fitAge + " (AGE " + age + ")", 0xFFF2F5FA, 4));
+            String basis = bestRun != null
+                    ? String.format(Locale.US, "Based on %.2f km in %s", bestRun.km, fmtClockSec((int) Math.round(bestRun.min * 60.0)))
+                    : "Estimated from Resting HR (" + restBpm + " BPM)";
+            if (hrr > 0) basis += "  ·  Latest HRR-60: -" + hrr + " BPM";
+            hero.addView(subText(basis, 0xFF8A94A6, 6));
+        } else {
+            hero.addView(bigHero("\u2014", 0xFF8A94A6));
+            hero.addView(subText("Log a run of 6+ min (or a Resting BPM in Camera Pulse) to unlock VO2 Max & Training Zones.", 0xFF8A94A6, 6));
+        }
+        container.addView(hero);
+
+        // 5 Personal Training Zones (Z1..Z5 min/km based on VDOT / VO2 velocity)
+        LinearLayout zones = makeCard(dp(12));
+        zones.addView(label("5 PERSONAL PACE ZONES (MIN/KM)", 0xFF00B4D8));
+        if (vo2 > 0) {
+            // Threshold / vVO2 velocity from VO2max: solve 0.000104 v^2 + 0.182258 v - (4.6 + vo2) = 0
+            double disc = 0.182258 * 0.182258 + 4.0 * 0.000104 * (4.6 + vo2);
+            double vVo2 = (-0.182258 + Math.sqrt(disc)) / (2.0 * 0.000104); // m/min at 100% VO2max
+            double[][] zPct = {
+                    {0.58, 0.67}, // Z1 Recovery
+                    {0.67, 0.76}, // Z2 Easy Aerobic Base
+                    {0.76, 0.85}, // Z3 Tempo / Cruise
+                    {0.85, 0.93}, // Z4 Lactate Threshold
+                    {0.93, 1.03}  // Z5 VO2 Max Intervals
+            };
+            String[] zName = {"Z1 RECOVERY", "Z2 AEROBIC BASE", "Z3 TEMPO", "Z4 THRESHOLD", "Z5 VO2 INTERVALS"};
+            int[] zCol = {0xFF8A94A6, 0xFF00B4D8, 0xFF00E5A0, 0xFFFFB454, 0xFFFF5C5C};
+            for (int i = 0; i < 5; i++) {
+                double slowP = 1000.0 / (vVo2 * zPct[i][0]);
+                double fastP = 1000.0 / (vVo2 * zPct[i][1]);
+                addColoredInfoRow(zones, zName[i], fmtPaceMin(fastP) + " \u2013 " + fmtPaceMin(slowP) + " /km", zCol[i]);
+            }
+        } else {
+            zones.addView(subText("Zones unlock once a qualifying run is logged.", 0xFF4A5268, 8));
+        }
+        container.addView(zones);
+
+        // Race Ceiling Predictor (Riegel)
+        LinearLayout race = makeCard(dp(12));
+        race.addView(label("RACE CEILING PREDICTOR (RIEGEL)", 0xFFFFB454));
+        if (bestRun != null) {
+            double[] dists = {1.0, 5.0, 10.0, 21.1};
+            String[] names = {"1 KM", "5 KM", "10 KM", "HALF MARATHON (21.1K)"};
+            for (int i = 0; i < dists.length; i++) {
+                double predMin = bestRun.min * Math.pow(dists[i] / bestRun.km, 1.06);
+                int sec = (int) Math.round(predMin * 60.0);
+                addInfoRow(race, names[i], fmtClockSec(sec) + "  (" + fmtPaceMin(predMin / dists[i]) + ")");
+            }
+        } else {
+            race.addView(subText("Log a run \u22651 km (6+ min) to project 1K / 5K / 10K / 21K finish ceilings.", 0xFF4A5268, 8));
+        }
+        container.addView(race);
+    }
+
+    // ================= 8. BOLT BREATH & COOLDOWN PACER LAB =================
+
+    private void renderBoltDetail() {
+        List<long[]> history = loadBoltHistory();
+        int latest = history.isEmpty() ? 0 : (int) history.get(0)[1];
+        int avg30 = avgBolt30(history);
+
+        LinearLayout hero = makeCard(dp(14));
+        hero.addView(label("BOLT SCORE · CO2 TOLERANCE", 0xFF00B4D8));
+        boltTimeTv = bigHero(boltRunning ? "0.0 s" : (latest > 0 ? latest + " s" : "\u2014"),
+                latest >= 25 ? 0xFF00E5A0 : 0xFF00B4D8);
+        hero.addView(boltTimeTv);
+
+        String tierMsg = latest == 0
+                ? "Breathe normally, exhale softly, pinch nose & tap START until first natural urge to breathe."
+                : boltTier(latest) + (avg30 > 0 ? "   ·   30D AVG " + avg30 + "s" : "");
+        hero.addView(subText(tierMsg, 0xFFF2F5FA, 4));
+
+        boltBtn = new Button(act);
+        boltBtn.setText(boltRunning ? "STOP & SAVE BOLT" : "START BOLT TEST");
+        boltBtn.setTextSize(13);
+        boltBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        boltBtn.setLetterSpacing(0.12f);
+        boltBtn.setStateListAnimator(null);
+        boltBtn.setBackgroundResource(R.drawable.btn_primary);
+        boltBtn.setTextColor(0xFF07121C);
+        LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(48));
+        bLp.topMargin = dp(12);
+        boltBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (!boltRunning) {
+                    boltRunning = true;
+                    boltStartMs = System.currentTimeMillis();
+                    boltBtn.setText("STOP & SAVE BOLT");
+                    hand.removeCallbacks(boltTick);
+                    hand.post(boltTick);
+                } else {
+                    int sec = (int) Math.round(Math.max(0.0, (System.currentTimeMillis() - boltStartMs) / 1000.0));
+                    boltRunning = false;
+                    if (!paceBreathRunning) hand.removeCallbacks(boltTick);
+                    if (sec >= 3 && sec <= 120) {
+                        saveBoltScore(sec);
+                        Toast.makeText(act, "Saved BOLT " + sec + "s \u2713", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(act, "Hold naturally (3s–120s) without forcing", Toast.LENGTH_SHORT).show();
+                    }
+                    render();
+                }
+            }
+        });
+        hero.addView(boltBtn, bLp);
+        hero.addView(subText("<10s High Stress · 10–20s Fair · 20–30s Good · 30–40s Strong · 40s+ Elite", 0xFF66708A, 8));
+        container.addView(hero);
+
+        // Cooldown Pacer (4s Inhale / 6s Exhale)
+        LinearLayout pacer = makeCard(dp(12));
+        pacer.addView(label("NASAL COOLDOWN PACER · 4S IN / 6S OUT", 0xFF00E5A0));
+        paceBreathPhaseTv = subText(paceBreathRunning ? "INHALE SLOWLY · 4s" : "Post-run autonomic reset (6 breaths/min)",
+                0xFFF2F5FA, 6);
+        pacer.addView(paceBreathPhaseTv);
+
+        FrameLayout pbBg = new FrameLayout(act);
+        GradientDrawable pbgD = new GradientDrawable();
+        pbgD.setCornerRadius(dp(6));
+        pbgD.setColor(0xFF1B2230);
+        pbBg.setBackground(pbgD);
+        paceBreathBar = new View(act);
+        GradientDrawable pbfD = new GradientDrawable();
+        pbfD.setCornerRadius(dp(6));
+        pbfD.setColor(0xFF00E5A0);
+        paceBreathBar.setBackground(pbfD);
+        paceBreathBarMaxW = 0;
+        pbBg.addView(paceBreathBar, new FrameLayout.LayoutParams(dp(12), LinearLayout.LayoutParams.MATCH_PARENT));
+        LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(12));
+        pLp.topMargin = dp(10);
+        pacer.addView(pbBg, pLp);
+
+        paceBreathBtn = new Button(act);
+        paceBreathBtn.setText(paceBreathRunning ? "STOP PACER" : "START 4-6 PACER");
+        paceBreathBtn.setTextSize(12);
+        paceBreathBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        paceBreathBtn.setLetterSpacing(0.12f);
+        paceBreathBtn.setStateListAnimator(null);
+        paceBreathBtn.setBackgroundResource(R.drawable.badge_off);
+        paceBreathBtn.setTextColor(0xFF00E5A0);
+        LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(42));
+        pbLp.topMargin = dp(10);
+        paceBreathBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                paceBreathRunning = !paceBreathRunning;
+                if (paceBreathRunning) {
+                    paceBreathStartMs = System.currentTimeMillis();
+                    paceBreathBtn.setText("STOP PACER");
+                    hand.removeCallbacks(boltTick);
+                    hand.post(boltTick);
+                } else {
+                    if (!boltRunning) hand.removeCallbacks(boltTick);
+                    render();
+                }
+            }
+        });
+        pacer.addView(paceBreathBtn, pbLp);
+        container.addView(pacer);
+
+        // BOLT History Card
+        LinearLayout logCard = makeCard(dp(12));
+        logCard.addView(label("BOLT HISTORY", 0xFF8A94A6));
+        if (history.isEmpty()) {
+            logCard.addView(subText("No BOLT scores saved yet.", 0xFF4A5268, 8));
+        } else {
+            SimpleDateFormat tf = new SimpleDateFormat("d MMM · HH:mm", Locale.US);
+            int max = Math.min(12, history.size());
+            for (int i = 0; i < max; i++) {
+                final long ts = history.get(i)[0];
+                int sec = (int) history.get(i)[1];
+                LinearLayout r = new LinearLayout(act);
+                r.setOrientation(LinearLayout.HORIZONTAL);
+                r.setGravity(Gravity.CENTER_VERTICAL);
+                LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                rlp.topMargin = dp(8);
+                TextView sc = new TextView(act);
+                sc.setText(sec + " s");
+                sc.setTextSize(15);
+                sc.setTypeface(Typeface.DEFAULT_BOLD);
+                sc.setTextColor(sec >= 25 ? 0xFF00E5A0 : 0xFF00B4D8);
+                sc.setMinWidth(dp(56));
+                r.addView(sc);
+                TextView tm = new TextView(act);
+                tm.setText(boltTier(sec) + " · " + tf.format(new Date(ts)));
+                tm.setTextSize(11);
+                tm.setTextColor(0xFF8A94A6);
+                r.addView(tm, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+                TextView del = new TextView(act);
+                del.setText("\u00D7");
+                del.setTextSize(17);
+                del.setTextColor(0xFF66708A);
+                del.setPadding(dp(8), dp(2), dp(4), dp(2));
+                del.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        deleteBoltEntry(ts);
+                        render();
+                    }
+                });
+                r.addView(del);
+                logCard.addView(r, rlp);
+            }
+        }
+        container.addView(logCard);
+    }
+
     // ================= MATH HELPERS (PURE & HONEST) =================
+
+    private int userAge() {
+        String dob = prefs.getString("dob", "");
+        if (dob != null && dob.length() >= 10) {
+            try {
+                int y = Integer.parseInt(dob.substring(6, 10));
+                int cy = Calendar.getInstance().get(Calendar.YEAR);
+                int a = cy - y;
+                if (a >= 10 && a <= 90) return a;
+            } catch (Exception ignored) {
+            }
+        }
+        return 24;
+    }
+
+    private double computeVo2Max() {
+        RunStore.Run r = store.bestRunForVo2();
+        if (r != null && r.min > 0 && r.km > 0) {
+            double v = (r.km * 1000.0) / r.min; // m/min
+            double t = r.min;
+            double pct = 0.8 + 0.1894393 * Math.exp(-0.012778 * t)
+                    + 0.2989558 * Math.exp(-0.1932605 * t);
+            double vo2 = -4.60 + 0.182258 * v + 0.000104 * v * v;
+            double est = vo2 / Math.max(0.55, pct);
+            return clamp(est, 25.0, 82.0);
+        }
+        int restBpm = PulseEngine.restingBpm(prefs);
+        if (restBpm >= 38 && restBpm <= 110) {
+            double hrMax = 208.0 - 0.7 * userAge();
+            return clamp(15.3 * (hrMax / restBpm), 25.0, 75.0);
+        }
+        return 0.0;
+    }
+
+    private static String vo2Tier(double v) {
+        if (v < 36) return "BUILDING";
+        if (v < 43) return "FAIR";
+        if (v < 50) return "GOOD";
+        if (v < 57) return "EXCELLENT";
+        if (v < 65) return "ATHLETE";
+        return "ELITE";
+    }
+
+    private static int fitnessAge(double vo2, int realAge) {
+        // Normative 45 ml/kg/min ~ age 25, dropping ~0.45 per year
+        int fa = (int) Math.round(25.0 + (45.0 - vo2) / 0.45);
+        return Math.max(18, Math.min(80, Math.min(realAge + 15, fa)));
+    }
+
+    private List<long[]> loadBoltHistory() {
+        java.util.ArrayList<long[]> out = new java.util.ArrayList<long[]>();
+        try {
+            JSONArray a = new JSONArray(prefs.getString("bolt_log", "[]"));
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject o = a.getJSONObject(i);
+                int sec = o.optInt("sec", 0);
+                if (sec > 0) out.add(new long[]{o.optLong("ts", 0L), sec});
+            }
+        } catch (Exception ignored) {
+        }
+        return out;
+    }
+
+    private int latestBoltSec() {
+        List<long[]> h = loadBoltHistory();
+        return h.isEmpty() ? 0 : (int) h.get(0)[1];
+    }
+
+    private void saveBoltScore(int sec) {
+        try {
+            JSONArray a = new JSONArray(prefs.getString("bolt_log", "[]"));
+            JSONObject o = new JSONObject();
+            long now = System.currentTimeMillis();
+            o.put("ts", now);
+            o.put("d", new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(now)));
+            o.put("sec", sec);
+            JSONArray next = new JSONArray();
+            next.put(o);
+            for (int i = 0; i < a.length() && next.length() < 90; i++) next.put(a.get(i));
+            prefs.edit().putString("bolt_log", next.toString()).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void deleteBoltEntry(long ts) {
+        try {
+            JSONArray a = new JSONArray(prefs.getString("bolt_log", "[]"));
+            JSONArray next = new JSONArray();
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject o = a.getJSONObject(i);
+                if (o.optLong("ts", -1) != ts) next.put(o);
+            }
+            prefs.edit().putString("bolt_log", next.toString()).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static int avgBolt30(List<long[]> hist) {
+        long cut = System.currentTimeMillis() - 30L * 86400000L;
+        int sum = 0, n = 0;
+        for (long[] r : hist) {
+            if (r[0] >= cut) { sum += (int) r[1]; n++; }
+        }
+        return n > 0 ? Math.round((float) sum / n) : 0;
+    }
+
+    private static String boltTier(int sec) {
+        if (sec < 10) return "HIGH STRESS";
+        if (sec < 20) return "FAIR NASAL";
+        if (sec < 30) return "GOOD CONTROL";
+        if (sec < 40) return "STRONG CO2";
+        return "ELITE";
+    }
 
     private int[] computeStrength() {
         // Part A: Cardio (0..100) from runs
@@ -1020,34 +1645,15 @@ public class ToolsUI {
     }
 
     private double estimateVo2Max() {
-        double bestPace = 0;
-        for (RunStore.Run r : store.recent(30)) {
-            if (r.km >= 1.5 && r.min > 0) {
-                double p = r.min / r.km;
-                if (bestPace == 0 || p < bestPace) bestPace = p;
-            }
-        }
-        if (bestPace <= 0) return 0;
-        double vMpm = 1000.0 / bestPace; // meters per minute
-        return Math.max(25.0, Math.min(80.0, (-4.6 + 0.182258 * vMpm + 0.000104 * vMpm * vMpm) / 0.85));
+        return computeVo2Max();
     }
 
     private String raceProjectionText() {
-        double bestPace = 0, baseKm = 0, baseMin = 0;
-        for (RunStore.Run r : store.recent(30)) {
-            if (r.km >= 1.5 && r.min > 0) {
-                double p = r.min / r.km;
-                if (bestPace == 0 || p < bestPace) {
-                    bestPace = p;
-                    baseKm = r.km;
-                    baseMin = r.min;
-                }
-            }
-        }
-        if (baseKm <= 0) return "Log a run \u22651.5 km to unlock 1K / 5K / 10K projections";
-        int s1 = (int) Math.round(baseMin * Math.pow(1.0 / baseKm, 1.06) * 60.0);
-        int s5 = (int) Math.round(baseMin * Math.pow(5.0 / baseKm, 1.06) * 60.0);
-        int s10 = (int) Math.round(baseMin * Math.pow(10.0 / baseKm, 1.06) * 60.0);
+        RunStore.Run bestRun = store.bestRunForVo2();
+        if (bestRun == null) return "Log a run \u22651 km (6+ min) to unlock 1K / 5K / 10K projections";
+        int s1 = (int) Math.round(bestRun.min * Math.pow(1.0 / bestRun.km, 1.06) * 60.0);
+        int s5 = (int) Math.round(bestRun.min * Math.pow(5.0 / bestRun.km, 1.06) * 60.0);
+        int s10 = (int) Math.round(bestRun.min * Math.pow(10.0 / bestRun.km, 1.06) * 60.0);
         return "ESTIMATES   1K " + fmtClockSec(s1) + "   ·   5K " + fmtClockSec(s5) + "   ·   10K " + fmtClockSec(s10);
     }
 
@@ -1189,6 +1795,10 @@ public class ToolsUI {
     }
 
     private void addInfoRow(LinearLayout parent, String k, String v) {
+        addColoredInfoRow(parent, k, v, 0xFFF2F5FA);
+    }
+
+    private void addColoredInfoRow(LinearLayout parent, String k, String v, int keyCol) {
         LinearLayout r = new LinearLayout(act);
         r.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -1198,7 +1808,8 @@ public class ToolsUI {
         kt.setText(k);
         kt.setTextSize(11);
         kt.setLetterSpacing(0.08f);
-        kt.setTextColor(0xFF8A94A6);
+        kt.setTextColor(keyCol == 0xFFF2F5FA ? 0xFF8A94A6 : keyCol);
+        kt.setTypeface(keyCol == 0xFFF2F5FA ? Typeface.DEFAULT : Typeface.DEFAULT_BOLD);
         TextView vt = new TextView(act);
         vt.setText(v);
         vt.setTextSize(13);
@@ -1207,6 +1818,109 @@ public class ToolsUI {
         r.addView(kt, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         r.addView(vt);
         parent.addView(r, lp);
+    }
+
+    private void addClockStepperRow(LinearLayout parent, final String labelStr, final int curSec,
+                                    final String key, final int stepSec, final int minSec, final int maxSec) {
+        LinearLayout r = new LinearLayout(act);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(10);
+
+        TextView k = new TextView(act);
+        k.setText(labelStr);
+        k.setTextSize(11);
+        k.setTypeface(Typeface.DEFAULT_BOLD);
+        k.setLetterSpacing(0.08f);
+        k.setTextColor(0xFF8A94A6);
+        r.addView(k, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        r.addView(stepBtn("\u2212", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                prefs.edit().putFloat(key, Math.max(minSec, curSec - stepSec)).apply();
+                render();
+            }
+        }));
+
+        TextView val = new TextView(act);
+        val.setText(fmtClockSec(curSec));
+        val.setTextSize(13);
+        val.setTypeface(Typeface.DEFAULT_BOLD);
+        val.setTextColor(0xFFF2F5FA);
+        val.setGravity(Gravity.CENTER);
+        val.setPadding(dp(10), dp(6), dp(10), dp(6));
+        val.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                promptClockEdit(labelStr, key, curSec, minSec, maxSec);
+            }
+        });
+        r.addView(val);
+
+        r.addView(stepBtn("+", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                prefs.edit().putFloat(key, Math.min(maxSec, curSec + stepSec)).apply();
+                render();
+            }
+        }));
+
+        parent.addView(r, lp);
+    }
+
+    private void promptClockEdit(String title, final String key, int curSec, final int minSec, final int maxSec) {
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+        row.setPadding(dp(20), dp(12), dp(20), 0);
+
+        int m = curSec / 60, s = curSec % 60;
+        final EditText minEt = new EditText(act);
+        minEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        minEt.setHint("MIN");
+        minEt.setGravity(Gravity.CENTER);
+        minEt.setText(m > 0 ? String.valueOf(m) : "");
+        minEt.setSelection(minEt.getText().length());
+
+        TextView colon = new TextView(act);
+        colon.setText(" : ");
+        colon.setTextSize(18);
+        colon.setTypeface(Typeface.DEFAULT_BOLD);
+
+        final EditText secEt = new EditText(act);
+        secEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        secEt.setHint("SEC");
+        secEt.setGravity(Gravity.CENTER);
+        secEt.setText(String.format(Locale.US, "%02d", s));
+
+        row.addView(minEt, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(colon);
+        row.addView(secEt, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        new AlertDialog.Builder(act)
+                .setTitle(title + " (MIN : SEC)")
+                .setView(row)
+                .setPositiveButton("SAVE", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        try {
+                            String ms = minEt.getText().toString().trim();
+                            String ss = secEt.getText().toString().trim();
+                            int mv = ms.isEmpty() ? 0 : Integer.parseInt(ms);
+                            int sv = ss.isEmpty() ? 0 : Integer.parseInt(ss);
+                            int total = Math.max(minSec, Math.min(maxSec, mv * 60 + sv));
+                            prefs.edit().putFloat(key, total).apply();
+                            render();
+                        } catch (Exception e) {
+                            Toast.makeText(act, "Enter minutes and seconds", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                })
+                .setNegativeButton("CANCEL", null)
+                .show();
     }
 
     private void addIntStepperRow(LinearLayout parent, final String labelStr, String valStr,

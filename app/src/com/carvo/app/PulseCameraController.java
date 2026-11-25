@@ -54,6 +54,7 @@ public class PulseCameraController {
     private boolean aeLocked = false;
     private Range<Integer> bestFpsRange = null;
 
+    private long measureMs = MEASURE_MS;
     private long fingerSinceMs = 0L;
     private long lastFingerMs = 0L;
     private long measureStartMs = 0L;
@@ -71,7 +72,12 @@ public class PulseCameraController {
     }
 
     public void start(final TextureView tv) {
+        start(tv, MEASURE_MS);
+    }
+
+    public void start(final TextureView tv, long durationMs) {
         if (running) return;
+        measureMs = Math.max(8000L, Math.min(35000L, durationMs));
         running = true;
         engine.reset();
         fingerSinceMs = 0L;
@@ -340,20 +346,20 @@ public class PulseCameraController {
         }
 
         long el = now - measureStartMs;
-        float prog = Math.min(1f, el / (float) MEASURE_MS);
+        float prog = Math.min(1f, el / (float) measureMs);
         frameCounter++;
         if (frameCounter % 24 == 0 && engine.getCount() >= 110) {
             int est = engine.estimateLiveBpm();
             if (est > 0) lastLiveBpm = est;
         }
 
-        int secLeft = Math.max(0, (int) Math.ceil((MEASURE_MS - el) / 1000.0));
+        int secLeft = Math.max(0, (int) Math.ceil((measureMs - el) / 1000.0));
         String status = lastLiveBpm > 0
                 ? "LOCKING PULSE \u00B7 " + secLeft + "S"
                 : "READING WAVE \u00B7 " + secLeft + "S";
         notifyUi(wave, true, prog, status, lastLiveBpm);
 
-        if (el >= MEASURE_MS) {
+        if (el >= measureMs) {
             final PulseEngine.PulseResult res = engine.finalizeReading();
             stop();
             mainHand.post(new Runnable() {

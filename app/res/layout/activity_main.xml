@@ -605,15 +605,11 @@
                 android:paddingTop="18dp"
                 android:paddingBottom="24dp">
 
-                <!-- TOTAL RUNS BLOCK -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="?attr/cardBg"
-                    android:padding="18dp"
-                    android:layout_marginTop="12dp">
+                    android:gravity="center_vertical">
                     <View
                         android:layout_width="8dp"
                         android:layout_height="8dp"
@@ -622,39 +618,17 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginLeft="8dp"
-                        android:text="TOTAL RUNS"
+                        android:text="LOG"
                         android:textSize="11sp"
                         android:letterSpacing="0.25"
                         android:textColor="#8A94A6" />
-                    <View
-                        android:layout_width="0dp"
-                        android:layout_height="1dp"
-                        android:layout_weight="1" />
-                    <TextView
-                        android:id="@+id/histRunsBig"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textSize="26sp"
-                        android:textStyle="bold"
-                        android:textColor="#00E5A0" />
                 </LinearLayout>
-
-                <TextView
-                    android:id="@+id/swipeHint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center"
-                    android:text="SWIPE A RUN RIGHT TO PIN IT"
-                    android:textSize="8sp"
-                    android:letterSpacing="0.15"
-                    android:textColor="#4A5268" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginTop="12dp">
+                    android:layout_marginTop="14dp">
                     <Button
                         android:id="@+id/exportBtn"
                         android:layout_width="0dp"
@@ -706,6 +680,16 @@
                         android:layout_height="wrap_content"
                         android:orientation="vertical" />
                 </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center"
+                    android:text="TAP A RUN FOR DETAILS · SWIPE RIGHT TO PIN"
+                    android:textSize="8sp"
+                    android:letterSpacing="0.14"
+                    android:textColor="#4A5268" />
 
                 <TextView
                     android:id="@+id/backupAge"
@@ -1309,12 +1293,57 @@
                             android:textSize="11sp"
                             android:letterSpacing="0.25"
                             android:textColor="#8A94A6" />
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="1dp"
+                            android:layout_weight="1" />
+                        <TextView
+                            android:id="@+id/radAllBtn"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp"
+                            android:background="@drawable/badge_on"
+                            android:text="ALL-TIME"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.1"
+                            android:textColor="#00E5A0"
+                            android:clickable="true"
+                            android:focusable="true" />
+                        <TextView
+                            android:id="@+id/rad14Btn"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="6dp"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp"
+                            android:background="@drawable/badge_off"
+                            android:text="14D FORM"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.1"
+                            android:textColor="#66708A"
+                            android:clickable="true"
+                            android:focusable="true" />
                     </LinearLayout>
                     <com.carvo.app.RadarView
                         android:id="@+id/radar"
                         android:layout_width="match_parent"
                         android:layout_height="260dp"
                         android:layout_marginTop="8dp" />
+                    <TextView
+                        android:id="@+id/radSubTxt"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.12"
+                        android:textColor="#66708A" />
                 </LinearLayout>
 
                 <!-- PACE TREND CARD -->
@@ -1605,6 +1634,35 @@
                         android:textSize="11sp"
                         android:letterSpacing="0.25"
                         android:textColor="#8A94A6" />
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+                    <FrameLayout
+                        android:id="@+id/runGearWrap"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingLeft="8dp"
+                        android:paddingRight="2dp"
+                        android:clickable="true"
+                        android:focusable="true">
+                        <TextView
+                            android:id="@+id/runGearBtn"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:padding="2dp"
+                            android:text="@string/gear"
+                            android:textSize="20sp"
+                            android:textColor="#8A94A6" />
+                        <View
+                            android:id="@+id/runGearDot"
+                            android:layout_width="6dp"
+                            android:layout_height="6dp"
+                            android:layout_gravity="top|right"
+                            android:layout_marginTop="2dp"
+                            android:background="@drawable/dot"
+                            android:visibility="gone" />
+                    </FrameLayout>
                 </LinearLayout>
 
                 <LinearLayout
@@ -1683,7 +1741,7 @@
                             android:clickable="true"
                             android:focusable="true"
                             android:background="?attr/inputBg"
-                            android:text="TIMED"
+                            android:text="TARGET"
                             android:textSize="13sp"
                             android:textStyle="bold"
                             android:letterSpacing="0.15"
@@ -1757,57 +1815,104 @@
                         android:id="@+id/timedPane"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginTop="18dp"
+                        android:orientation="vertical"
+                        android:layout_marginTop="14dp"
                         android:visibility="gone">
 
-                        <TextView
-                            android:id="@+id/tMinus"
-                            android:layout_width="52dp"
-                            android:layout_height="52dp"
-                            android:gravity="center"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:background="?attr/inputBg"
-                            android:text="-"
-                            android:textSize="22sp"
-                            android:textStyle="bold"
-                            android:textColor="#F2F5FA" />
-
-                        <TextView
-                            android:id="@+id/timedMinTxt"
-                            android:layout_width="wrap_content"
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginLeft="18dp"
-                            android:layout_marginRight="18dp"
-                            android:minWidth="72dp"
-                            android:gravity="center"
-                            android:textSize="40sp"
-                            android:textStyle="bold"
-                            android:textColor="#00E5A0" />
+                            android:orientation="horizontal">
+                            <TextView
+                                android:id="@+id/targetTimeBtn"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:gravity="center"
+                                android:padding="8dp"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:background="@drawable/badge_on"
+                                android:text="TIME"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.12"
+                                android:textColor="#00E5A0" />
+                            <TextView
+                                android:id="@+id/targetDistBtn"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginLeft="6dp"
+                                android:gravity="center"
+                                android:padding="8dp"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:background="@drawable/badge_off"
+                                android:text="DISTANCE"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.12"
+                                android:textColor="#66708A" />
+                        </LinearLayout>
 
-                        <TextView
-                            android:id="@+id/tPlus"
-                            android:layout_width="52dp"
-                            android:layout_height="52dp"
-                            android:gravity="center"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:background="?attr/inputBg"
-                            android:text="+"
-                            android:textSize="22sp"
-                            android:textStyle="bold"
-                            android:textColor="#F2F5FA" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginLeft="14dp"
-                            android:text="MINUTES"
-                            android:textSize="9sp"
-                            android:letterSpacing="0.15"
-                            android:textColor="#66708A" />
+                            android:orientation="horizontal"
+                            android:gravity="center"
+                            android:layout_marginTop="12dp">
+
+                            <TextView
+                                android:id="@+id/tMinus"
+                                android:layout_width="50dp"
+                                android:layout_height="50dp"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:background="?attr/inputBg"
+                                android:text="-"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:textColor="#F2F5FA" />
+
+                            <TextView
+                                android:id="@+id/timedMinTxt"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginLeft="16dp"
+                                android:layout_marginRight="16dp"
+                                android:minWidth="84dp"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:textSize="38sp"
+                                android:textStyle="bold"
+                                android:textColor="#00E5A0" />
+
+                            <TextView
+                                android:id="@+id/tPlus"
+                                android:layout_width="50dp"
+                                android:layout_height="50dp"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:background="?attr/inputBg"
+                                android:text="+"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:textColor="#F2F5FA" />
+
+                            <TextView
+                                android:id="@+id/targetUnitTxt"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginLeft="12dp"
+                                android:text="MINUTES"
+                                android:textSize="9sp"
+                                android:letterSpacing="0.15"
+                                android:textColor="#66708A" />
+                        </LinearLayout>
                     </LinearLayout>
 
                     <TextView
@@ -1822,62 +1927,142 @@
                         android:textColor="#F2F5FA" />
 
                     <LinearLayout
+                        android:id="@+id/playProgBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginTop="8dp"
+                        android:visibility="gone">
+                        <FrameLayout
+                            android:id="@+id/playProgBg"
+                            android:layout_width="match_parent"
+                            android:layout_height="4dp"
+                            android:background="?attr/inputBg">
+                            <View
+                                android:id="@+id/playProgFill"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:background="#00E5A0" />
+                        </FrameLayout>
+                        <TextView
+                            android:id="@+id/playNextTxt"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:gravity="center"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.1"
+                            android:textColor="#8A94A6"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <com.carvo.app.CroMapView
+                        android:id="@+id/croMapView"
+                        android:layout_width="match_parent"
+                        android:layout_height="225dp"
+                        android:layout_marginTop="14dp"
+                        android:visibility="gone" />
+
+                    <LinearLayout
                         android:id="@+id/croLiveRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
+                        android:orientation="vertical"
                         android:background="?attr/inputBg"
-                        android:padding="14dp"
+                        android:padding="12dp"
                         android:layout_marginTop="14dp"
                         android:visibility="gone">
                         <LinearLayout
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical"
-                            android:gravity="center">
-                            <TextView
-                                android:id="@+id/croDistTxt"
-                                android:layout_width="wrap_content"
+                            android:orientation="horizontal">
+                            <LinearLayout
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:text="0.00"
-                                android:textSize="24sp"
-                                android:textStyle="bold"
-                                android:textColor="#00E5A0" />
-                            <TextView
-                                android:layout_width="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical"
+                                android:gravity="center">
+                                <TextView
+                                    android:id="@+id/croDistTxt"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="0.00"
+                                    android:textSize="22sp"
+                                    android:textStyle="bold"
+                                    android:textColor="#00E5A0" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="CROSITE KM"
+                                    android:textSize="8sp"
+                                    android:letterSpacing="0.12"
+                                    android:textColor="#66708A" />
+                            </LinearLayout>
+                            <View
+                                android:layout_width="1dp"
+                                android:layout_height="match_parent"
+                                android:background="?attr/dividerColor" />
+                            <LinearLayout
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:text="CROSITE KM"
-                                android:textSize="8sp"
-                                android:letterSpacing="0.15"
-                                android:textColor="#66708A" />
+                                android:layout_weight="1"
+                                android:orientation="vertical"
+                                android:gravity="center">
+                                <TextView
+                                    android:id="@+id/croPaceTxt"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="\u2014"
+                                    android:textSize="22sp"
+                                    android:textStyle="bold"
+                                    android:textColor="#F2F5FA" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="AVG PACE"
+                                    android:textSize="8sp"
+                                    android:letterSpacing="0.12"
+                                    android:textColor="#66708A" />
+                            </LinearLayout>
+                            <View
+                                android:layout_width="1dp"
+                                android:layout_height="match_parent"
+                                android:background="?attr/dividerColor" />
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical"
+                                android:gravity="center">
+                                <TextView
+                                    android:id="@+id/croSpmTxt"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="\u2014"
+                                    android:textSize="22sp"
+                                    android:textStyle="bold"
+                                    android:textColor="#00B4D8" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="CADENCE SPM"
+                                    android:textSize="8sp"
+                                    android:letterSpacing="0.12"
+                                    android:textColor="#66708A" />
+                            </LinearLayout>
                         </LinearLayout>
-                        <View
-                            android:layout_width="1dp"
-                            android:layout_height="match_parent"
-                            android:background="?attr/dividerColor" />
-                        <LinearLayout
-                            android:layout_width="0dp"
+                        <TextView
+                            android:id="@+id/croTurnTxt"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical"
-                            android:gravity="center">
-                            <TextView
-                                android:id="@+id/croPaceTxt"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="\u2014"
-                                android:textSize="24sp"
-                                android:textStyle="bold"
-                                android:textColor="#F2F5FA" />
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="AVG PACE"
-                                android:textSize="8sp"
-                                android:letterSpacing="0.15"
-                                android:textColor="#66708A" />
-                        </LinearLayout>
+                            android:layout_marginTop="8dp"
+                            android:gravity="center"
+                            android:textSize="9sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.12"
+                            android:textColor="#FFB454"
+                            android:visibility="gone" />
                     </LinearLayout>
 
                     <TextView
@@ -1954,6 +2139,41 @@
                         android:textStyle="bold"
                         android:letterSpacing="0.15"
                         android:textColor="#07121C" />
+
+                    <LinearLayout
+                        android:id="@+id/wuActionRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="20dp"
+                        android:visibility="gone">
+                        <Button
+                            android:id="@+id/btnSkipWu"
+                            android:layout_width="0dp"
+                            android:layout_height="52dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/btn_primary"
+                            android:stateListAnimator="@null"
+                            android:text="SKIP WARM-UP"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.12"
+                            android:textColor="#07121C" />
+                        <Button
+                            android:id="@+id/btnCancelWu"
+                            android:layout_width="wrap_content"
+                            android:layout_height="52dp"
+                            android:layout_marginLeft="6dp"
+                            android:paddingLeft="18dp"
+                            android:paddingRight="18dp"
+                            android:background="?attr/inputBg"
+                            android:stateListAnimator="@null"
+                            android:text="CANCEL"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.12"
+                            android:textColor="#FFB454" />
+                    </LinearLayout>
 
                     <Button
                         android:id="@+id/btnPause"

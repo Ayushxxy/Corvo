@@ -78,7 +78,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:layout_marginBottom="6dp"
-        android:text="PRESS NEXT ON SECONDS TO SAVE"
+        android:text="TAP SAVE OR PRESS DONE ON KEYBOARD"
         android:textSize="9sp"
         android:letterSpacing="0.1"
         android:textColor="#66708A" />

@@ -36,12 +36,18 @@ public class PulseEngine {
         public final double confidence;
         public final boolean locked;
         public final String note;
+        public final double hrvMs;
 
         public PulseResult(int bpm, double confidence, boolean locked, String note) {
+            this(bpm, confidence, locked, note, 0.0);
+        }
+
+        public PulseResult(int bpm, double confidence, boolean locked, String note, double hrvMs) {
             this.bpm = bpm;
             this.confidence = confidence;
             this.locked = locked;
             this.note = note;
+            this.hrvMs = hrvMs;
         }
     }
 
@@ -50,16 +56,22 @@ public class PulseEngine {
         public final String d;
         public final int bpm;
         public final String tag;
+        public final double hrvMs;
 
         public PulseEntry(long ts, String d, int bpm, String tag) {
+            this(ts, d, bpm, tag, 0.0);
+        }
+
+        public PulseEntry(long ts, String d, int bpm, String tag, double hrvMs) {
             this.ts = ts;
             this.d = d;
             this.bpm = bpm;
             this.tag = tag;
+            this.hrvMs = hrvMs;
         }
     }
 
-    private static final int MAX_SAMPLES = 720;
+    private static final int MAX_SAMPLES = 1050;
     private final long[] tsBuf = new long[MAX_SAMPLES];
     private final double[] rawBuf = new double[MAX_SAMPLES];
     private int count = 0;
@@ -271,13 +283,16 @@ public class PulseEngine {
         }
         double bpmAuto = (60.0 * fs) / exactLag;
 
-        // 4. Time-domain IBI peak verification
+        // 4. Time-domain IBI peak verification + sub-sample interpolation for HRV (RMSSD ms)
         double thresh = 0.28 * rms;
         List<Double> peakTimes = new ArrayList<Double>();
         double lastPeakT = -1000.0;
         for (int k = 1; k < m - 1; k++) {
             if (u[k] > thresh && u[k] > u[k - 1] && u[k] >= u[k + 1]) {
-                double pt = k * gridMs;
+                double denom = u[k - 1] - 2.0 * u[k] + u[k + 1];
+                double shift = Math.abs(denom) > 1e-6 ? 0.5 * (u[k - 1] - u[k + 1]) / denom : 0.0;
+                shift = Math.max(-0.5, Math.min(0.5, shift));
+                double pt = (k + shift) * gridMs;
                 if (pt - lastPeakT >= 270.0) { // <= 222 BPM
                     peakTimes.add(pt);
                     lastPeakT = pt;
@@ -285,6 +300,7 @@ public class PulseEngine {
             }
         }
         double bpmPeaks = 0.0;
+        double hrvMs = 0.0;
         if (peakTimes.size() >= 4) {
             double[] ibi = new double[peakTimes.size() - 1];
             for (int i = 0; i < ibi.length; i++) ibi[i] = peakTimes.get(i + 1) - peakTimes.get(i);
@@ -293,14 +309,31 @@ public class PulseEngine {
             double med = sorted[sorted.length / 2];
             double sumClean = 0;
             int cleanN = 0;
-            for (double v : ibi) {
-                if (v >= 0.72 * med && v <= 1.32 * med) {
+            boolean[] validIbi = new boolean[ibi.length];
+            for (int i = 0; i < ibi.length; i++) {
+                double v = ibi[i];
+                if (v >= 0.75 * med && v <= 1.25 * med) {
                     sumClean += v;
                     cleanN++;
+                    validIbi[i] = true;
                 }
             }
             if (cleanN >= 3) {
                 bpmPeaks = 60000.0 / (sumClean / cleanN);
+            }
+            double sumSqDiff = 0;
+            int pairN = 0;
+            for (int i = 0; i < ibi.length - 1; i++) {
+                if (validIbi[i] && validIbi[i + 1]) {
+                    double dIbi = ibi[i + 1] - ibi[i];
+                    if (Math.abs(dIbi) <= 220.0) {
+                        sumSqDiff += dIbi * dIbi;
+                        pairN++;
+                    }
+                }
+            }
+            if (pairN >= 6) {
+                hrvMs = Math.max(5.0, Math.min(180.0, Math.sqrt(sumSqDiff / pairN)));
             }
         }
 
@@ -318,10 +351,11 @@ public class PulseEngine {
 
         int rounded = (int) Math.round(Math.max(40.0, Math.min(210.0, finalBpm)));
         boolean locked = conf >= 0.42;
+        if (!locked) hrvMs = 0.0;
         String note = locked
                 ? "Signal locked (" + Math.round(conf * 100) + "% match)"
                 : "Noisy wave — touch gently without pressing hard";
-        return new PulseResult(rounded, conf, locked, note);
+        return new PulseResult(rounded, conf, locked, note, hrvMs);
     }
 
     private static double[] detrendCentered(double[] x, int halfWin) {
@@ -350,7 +384,8 @@ public class PulseEngine {
                         o.getLong("ts"),
                         o.optString("d", ""),
                         o.getInt("bpm"),
-                        o.optString("tag", "CHECK")));
+                        o.optString("tag", "CHECK"),
+                        o.optDouble("hrv", 0.0)));
             }
         } catch (Exception ignored) {
         }
@@ -358,6 +393,10 @@ public class PulseEngine {
     }
 
     public static void saveReading(SharedPreferences prefs, int bpm, String tag) {
+        saveReading(prefs, bpm, tag, 0.0);
+    }
+
+    public static void saveReading(SharedPreferences prefs, int bpm, String tag, double hrvMs) {
         try {
             JSONArray a = new JSONArray(prefs.getString("pulse_log", "[]"));
             JSONObject o = new JSONObject();
@@ -366,6 +405,7 @@ public class PulseEngine {
             o.put("d", new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(now)));
             o.put("bpm", bpm);
             o.put("tag", tag);
+            if (hrvMs >= 5.0) o.put("hrv", Math.round(hrvMs * 10.0) / 10.0);
             JSONArray next = new JSONArray();
             next.put(o); // newest first
             for (int i = 0; i < a.length() && next.length() < 100; i++) {
@@ -410,14 +450,14 @@ public class PulseEngine {
         }
     }
 
-    /** Returns median/average resting BPM from log (tags RESTING or calm readings < 100), else 0. */
+    /** Returns median/average resting BPM from log (tags RESTING/HRV or calm readings < 100), else 0. */
     public static int restingBpm(SharedPreferences prefs) {
         List<PulseEntry> list = loadLog(prefs);
         int sumRest = 0, nRest = 0;
         int sumCalm = 0, nCalm = 0;
         for (int i = 0; i < list.size() && i < 30; i++) {
             PulseEntry e = list.get(i);
-            if ("RESTING".equals(e.tag) && e.bpm >= 38 && e.bpm <= 115) {
+            if (("RESTING".equals(e.tag) || "HRV".equals(e.tag)) && e.bpm >= 38 && e.bpm <= 115) {
                 sumRest += e.bpm;
                 nRest++;
             } else if (!"POST-RUN".equals(e.tag) && e.bpm >= 40 && e.bpm <= 100) {
@@ -428,5 +468,30 @@ public class PulseEngine {
         if (nRest > 0) return Math.round((float) sumRest / nRest);
         if (nCalm > 0) return Math.round((float) sumCalm / nCalm);
         return 0;
+    }
+
+    /** Average morning/resting HRV (RMSSD ms) across calm readings with valid HRV, else 0. */
+    public static double baselineHrv(SharedPreferences prefs) {
+        List<PulseEntry> list = loadLog(prefs);
+        double sum = 0;
+        int n = 0;
+        for (int i = 0; i < list.size() && i < 20; i++) {
+            PulseEntry e = list.get(i);
+            if (!"POST-RUN".equals(e.tag) && e.hrvMs >= 5.0) {
+                sum += e.hrvMs;
+                n++;
+            }
+        }
+        return n > 0 ? sum / n : 0.0;
+    }
+
+    /** Latest valid calm HRV reading for date d, or 0. */
+    public static double latestHrvForDate(SharedPreferences prefs, String d) {
+        for (PulseEntry e : loadLog(prefs)) {
+            if (d.equals(e.d) && !"POST-RUN".equals(e.tag) && e.hrvMs >= 5.0) {
+                return e.hrvMs;
+            }
+        }
+        return 0.0;
     }
 }

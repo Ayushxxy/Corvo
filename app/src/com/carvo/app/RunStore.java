@@ -25,20 +25,29 @@ public class RunStore {
         public final String pin;      // "" = not pinned, else pin title
         public final double[] laps;   // v3.7: lap minutes in order (null = none)
         public final int bpm;         // v4.0/4.1: optional post-run heart rate (0 = none)
+        public final int hrr60;       // v5.0: 60s post-run HR recovery drop in BPM (0 = none)
+        public final int cadence;     // v5.0: avg steps per min from CroSite (0 = none)
+        public final double outPace;  // v5.0: outbound min/km split (0 = none)
+        public final double backPace; // v5.0: return min/km split (0 = none)
 
         Run(String d, double km, double min) {
-            this(d, km, min, -1, -1, "", null, 0);
+            this(d, km, min, -1, -1, "", null, 0, 0, 0, 0, 0);
         }
 
         Run(String d, double km, double min, int m1, int m2, String pin) {
-            this(d, km, min, m1, m2, pin, null, 0);
+            this(d, km, min, m1, m2, pin, null, 0, 0, 0, 0, 0);
         }
 
         Run(String d, double km, double min, int m1, int m2, String pin, double[] laps) {
-            this(d, km, min, m1, m2, pin, laps, 0);
+            this(d, km, min, m1, m2, pin, laps, 0, 0, 0, 0, 0);
         }
 
         Run(String d, double km, double min, int m1, int m2, String pin, double[] laps, int bpm) {
+            this(d, km, min, m1, m2, pin, laps, bpm, 0, 0, 0, 0);
+        }
+
+        Run(String d, double km, double min, int m1, int m2, String pin, double[] laps, int bpm,
+            int hrr60, int cadence, double outPace, double backPace) {
             this.d = d;
             this.km = km;
             this.min = min;
@@ -47,6 +56,10 @@ public class RunStore {
             this.pin = pin;
             this.laps = laps;
             this.bpm = bpm;
+            this.hrr60 = hrr60;
+            this.cadence = cadence;
+            this.outPace = outPace;
+            this.backPace = backPace;
         }
     }
 
@@ -77,13 +90,44 @@ public class RunStore {
     public RunStore(Context c) {
         ctx = c.getApplicationContext();
         prefs = c.getSharedPreferences("carvo", Context.MODE_PRIVATE);
+        loadAll();
+        // DOST build starts from zero — personal seed runs only in private build
+        if (!Flavor.DOST && !prefs.getBoolean("seeded_v24", false)) {
+            prefs.edit().putBoolean("seeded_v24", true).apply();
+            boolean added = false;
+            added |= seedIfAbsent("2026-11-09", 3.0, 17.0);
+            added |= seedIfAbsent("2026-11-10", 3.0, 20.0);
+            added |= seedIfAbsent("2026-11-11", 3.0, 19.0);
+            added |= seedIfAbsent("2026-11-12", 3.0, 16.0);
+            added |= seedIfAbsent("2026-11-13", 3.5, 20.0 + 25.0 / 60.0);
+            added |= seedIfAbsent("2026-11-15", 3.0, 20.0 + 12.0 / 60.0);
+            if (added) {
+                sort();
+                persist();
+            }
+        }
+        sort();
+    }
+
+    /** Re-read runs & rest schedule from SharedPreferences into the shared instance. */
+    public void reload() {
+        loadAll();
+    }
+
+    private void loadAll() {
+        runs.clear();
+        restFrom.clear();
+        restDays.clear();
+        restMoves.clear();
         try {
             JSONArray a = new JSONArray(prefs.getString("runs", "[]"));
             for (int i = 0; i < a.length(); i++) {
                 JSONObject o = a.getJSONObject(i);
                 runs.add(new Run(o.getString("d"), o.getDouble("km"), o.getDouble("min"),
                         o.optInt("m1", -1), o.optInt("m2", -1), o.optString("pin", ""),
-                        parseLaps(o.optJSONArray("laps")), o.optInt("bpm", 0)));
+                        parseLaps(o.optJSONArray("laps")), o.optInt("bpm", 0),
+                        o.optInt("hrr60", 0), o.optInt("cadence", 0),
+                        o.optDouble("outPace", 0), o.optDouble("backPace", 0)));
             }
         } catch (Exception ignored) {
         }
@@ -99,13 +143,22 @@ public class RunStore {
         return out;
     }
 
+    private boolean seedIfAbsent(String d, double km, double min) {
+        if (get(d) == null) {
+            runs.add(new Run(d, km, min));
+            return true;
+        }
+        return false;
+    }
+
     // ================= REST DAY ENGINE =================
 
     private void loadRestHist() {
         String h = prefs.getString("restday_hist", null);
         if (h == null) {
-            // Default weekly rest day: Sunday
-            h = "[{\"from\":\"1970-01-01\",\"day\":1}]";
+            // Public DOST builds start cleanly on Sunday from install date; private build keeps legacy schedule
+            String defFrom = Flavor.DOST ? today() : "2026-11-16";
+            h = "[{\"from\":\"" + defFrom + "\",\"day\":1}]";
             prefs.edit().putString("restday_hist", h).apply();
         }
         try {
@@ -357,6 +410,10 @@ public class RunStore {
                     o.put("laps", lp);
                 }
                 if (r.bpm > 0) o.put("bpm", r.bpm);
+                if (r.hrr60 > 0) o.put("hrr60", r.hrr60);
+                if (r.cadence > 0) o.put("cadence", r.cadence);
+                if (r.outPace > 0) o.put("outPace", r.outPace);
+                if (r.backPace > 0) o.put("backPace", r.backPace);
             } catch (Exception ignored) {
             }
             a.put(o);
@@ -444,10 +501,10 @@ public class RunStore {
     public void upsertWithLaps(String d, double km, double min, double[] laps) {
         Run old = get(d);
         double[] lp = laps != null ? laps : (old != null ? old.laps : null);
-        int bpm = old != null ? old.bpm : 0;
         Run n = old == null
-                ? new Run(d, km, min, -1, -1, "", lp, 0)
-                : new Run(d, km, min, old.m1, old.m2, old.pin, lp, bpm);
+                ? new Run(d, km, min, -1, -1, "", lp, 0, 0, 0, 0, 0)
+                : new Run(d, km, min, old.m1, old.m2, old.pin, lp, old.bpm,
+                        old.hrr60, old.cadence, old.outPace, old.backPace);
         for (int i = runs.size() - 1; i >= 0; i--) {
             if (runs.get(i).d.equals(d)) runs.remove(i);
         }
@@ -456,13 +513,26 @@ public class RunStore {
         persist();
     }
 
+    /** Remove a logged run cleanly (e.g. Discard Today's Run). */
+    public boolean remove(String d) {
+        boolean removed = false;
+        for (int i = runs.size() - 1; i >= 0; i--) {
+            if (runs.get(i).d.equals(d)) {
+                runs.remove(i);
+                removed = true;
+            }
+        }
+        if (removed) persist();
+        return removed;
+    }
+
     public void setMood(String d, int slot, int val) {
         for (int i = 0; i < runs.size(); i++) {
             Run r = runs.get(i);
             if (r.d.equals(d)) {
                 Run n = slot == 0
-                        ? new Run(r.d, r.km, r.min, val, r.m2, r.pin, r.laps, r.bpm)
-                        : new Run(r.d, r.km, r.min, r.m1, val, r.pin, r.laps, r.bpm);
+                        ? new Run(r.d, r.km, r.min, val, r.m2, r.pin, r.laps, r.bpm, r.hrr60, r.cadence, r.outPace, r.backPace)
+                        : new Run(r.d, r.km, r.min, r.m1, val, r.pin, r.laps, r.bpm, r.hrr60, r.cadence, r.outPace, r.backPace);
                 runs.set(i, n);
                 persist();
                 return;
@@ -478,7 +548,7 @@ public class RunStore {
             Run r = runs.get(i);
             if (r.d.equals(d)) {
                 String t = r.pin.length() > 0 ? "" : autoTitle(r);
-                runs.set(i, new Run(r.d, r.km, r.min, r.m1, r.m2, t, r.laps, r.bpm));
+                runs.set(i, new Run(r.d, r.km, r.min, r.m1, r.m2, t, r.laps, r.bpm, r.hrr60, r.cadence, r.outPace, r.backPace));
                 persist();
                 return t;
             }
@@ -840,6 +910,68 @@ public class RunStore {
         return c;
     }
 
+    /** 14D Form Radar helpers (requested 14-day window). */
+    public int runDaysLast14() {
+        String from = dateShift(today(), -13), td = today();
+        int c = 0;
+        for (Run r : runs) {
+            if (r.d.compareTo(from) >= 0 && r.d.compareTo(td) <= 0) c++;
+        }
+        return c;
+    }
+
+    public double paceLast14() {
+        String from = dateShift(today(), -13), td = today();
+        double sk = 0, sm = 0;
+        for (Run r : runs) {
+            if (r.d.compareTo(from) >= 0 && r.d.compareTo(td) <= 0 && r.km > 0) {
+                sk += r.km;
+                sm += r.min;
+            }
+        }
+        return sk > 0 ? sm / sk : 0;
+    }
+
+    public int avgScoreLast14() {
+        String from = dateShift(today(), -13), td = today();
+        int sum = 0, n = 0;
+        for (Run r : runs) {
+            if (r.d.compareTo(from) >= 0 && r.d.compareTo(td) <= 0) {
+                int s = scoreOf(r.d);
+                if (s > 0) { sum += s; n++; }
+            }
+        }
+        return n > 0 ? Math.round((float) sum / n) : 0;
+    }
+
+    /** Latest qualifying steady/fast run >= 12 min (or >= 6 min fallback) for VO2 Max estimation. */
+    public Run bestRunForVo2() {
+        Run best = null;
+        double bestV = 0;
+        for (Run r : runs) {
+            if (r.km >= 2.0 && r.min >= 12.0) {
+                double v = r.km / r.min;
+                if (best == null || v > bestV) { best = r; bestV = v; }
+            }
+        }
+        if (best != null) return best;
+        for (Run r : runs) {
+            if (r.km >= 1.0 && r.min >= 6.0) {
+                double v = r.km / r.min;
+                if (best == null || v > bestV) { best = r; bestV = v; }
+            }
+        }
+        return best;
+    }
+
+    /** Latest saved HRR-60 drop across recent runs, or 0. */
+    public int latestHrr60() {
+        for (int i = runs.size() - 1; i >= 0; i--) {
+            if (runs.get(i).hrr60 > 0) return runs.get(i).hrr60;
+        }
+        return 0;
+    }
+
     // ================= RUN SCORE (always computed, never stored) =================
 
     private static int clampI(double v) {
@@ -1016,7 +1148,8 @@ public class RunStore {
         for (int i = 0; i < runs.size(); i++) {
             Run r = runs.get(i);
             if (r.d.equals(d)) {
-                runs.set(i, new Run(r.d, r.km, r.min, r.m1, r.m2, r.pin, laps, r.bpm));
+                runs.set(i, new Run(r.d, r.km, r.min, r.m1, r.m2, r.pin, laps, r.bpm,
+                        r.hrr60, r.cadence, r.outPace, r.backPace));
                 persist();
                 return;
             }
@@ -1028,7 +1161,37 @@ public class RunStore {
         for (int i = 0; i < runs.size(); i++) {
             Run r = runs.get(i);
             if (r.d.equals(d)) {
-                runs.set(i, new Run(r.d, r.km, r.min, r.m1, r.m2, r.pin, r.laps, bpm));
+                runs.set(i, new Run(r.d, r.km, r.min, r.m1, r.m2, r.pin, r.laps, bpm,
+                        r.hrr60, r.cadence, r.outPace, r.backPace));
+                persist();
+                return;
+            }
+        }
+    }
+
+    /** Attach HRR-60 recovery drop (BPM) to an existing run. */
+    public void setHrr60(String d, int hrr60) {
+        if (hrr60 <= 0) return;
+        for (int i = 0; i < runs.size(); i++) {
+            Run r = runs.get(i);
+            if (r.d.equals(d)) {
+                runs.set(i, new Run(r.d, r.km, r.min, r.m1, r.m2, r.pin, r.laps, r.bpm,
+                        hrr60, r.cadence, r.outPace, r.backPace));
+                persist();
+                return;
+            }
+        }
+    }
+
+    /** Attach CroSite Pro cadence & turnaround OUT/BACK split to an existing run. */
+    public void setCroPro(String d, int cadence, double outPace, double backPace) {
+        for (int i = 0; i < runs.size(); i++) {
+            Run r = runs.get(i);
+            if (r.d.equals(d)) {
+                runs.set(i, new Run(r.d, r.km, r.min, r.m1, r.m2, r.pin, r.laps, r.bpm,
+                        r.hrr60, cadence > 0 ? cadence : r.cadence,
+                        outPace > 0 ? outPace : r.outPace,
+                        backPace > 0 ? backPace : r.backPace));
                 persist();
                 return;
             }
@@ -1137,6 +1300,10 @@ public class RunStore {
                 double cal = calOf(r);
                 if (cal > 0) o.put("cal", Math.round(cal));
                 if (r.bpm > 0) o.put("bpm", r.bpm);
+                if (r.hrr60 > 0) o.put("hrr60", r.hrr60);
+                if (r.cadence > 0) o.put("cadence", r.cadence);
+                if (r.outPace > 0) o.put("outPace", r.outPace);
+                if (r.backPace > 0) o.put("backPace", r.backPace);
             } catch (Exception ignored) {
             }
             a.put(o);
@@ -1161,16 +1328,24 @@ public class RunStore {
             if (prefs.getInt("str_plank", 0) > 0) prof.put("str_plank", prefs.getInt("str_plank", 0));
             if (prefs.contains("water_hot")) prof.put("water_hot", prefs.getBoolean("water_hot", false));
             if (prefs.contains("crosite_stride_k")) prof.put("crosite_stride_k", prefs.getFloat("crosite_stride_k", 1.0f));
+            if (prefs.contains("coach_tts")) prof.put("coach_tts", prefs.getBoolean("coach_tts", false));
+            if (prefs.contains("coach_metro_spm")) prof.put("coach_metro_spm", prefs.getInt("coach_metro_spm", 172));
+            if (prefs.contains("coach_warmup_on")) prof.put("coach_warmup_on", prefs.getBoolean("coach_warmup_on", false));
+            String wul = prefs.getString("coach_warmup_list", "");
+            if (wul.length() > 0) prof.put("coach_warmup_list", wul);
         } catch (Exception ignored) {
         }
         org.json.JSONObject root = new org.json.JSONObject();
         try {
-            root.put("version", 4);
+            root.put("version", 5);
             root.put("runs", a);
             if (prof.length() > 0) root.put("profile", prof);
             String pl = prefs.getString("pulse_log", "[]");
             org.json.JSONArray pls = new org.json.JSONArray(pl);
             if (pls.length() > 0) root.put("pulse_log", pls);
+            String bl = prefs.getString("bolt_log", "[]");
+            org.json.JSONArray bls = new org.json.JSONArray(bl);
+            if (bls.length() > 0) root.put("bolt_log", bls);
         } catch (Exception ignored) {
         }
         return root.toString();
@@ -1194,6 +1369,10 @@ public class RunStore {
                     double[] lp = parseLaps(o.optJSONArray("laps"));
                     if (lp != null) setLaps(d, lp);
                     if (o.optInt("bpm", 0) > 0) setBpm(d, o.optInt("bpm", 0));
+                    if (o.optInt("hrr60", 0) > 0) setHrr60(d, o.optInt("hrr60", 0));
+                    int cad = o.optInt("cadence", 0);
+                    double op = o.optDouble("outPace", 0), bp = o.optDouble("backPace", 0);
+                    if (cad > 0 || op > 0 || bp > 0) setCroPro(d, cad, op, bp);
                     String pinStr = o.optString("pin", "");
                     if (pinStr.length() > 0) {
                         Run cur = get(d);
@@ -1201,7 +1380,8 @@ public class RunStore {
                             for (int ri = 0; ri < runs.size(); ri++) {
                                 if (runs.get(ri).d.equals(d)) {
                                     Run r2 = runs.get(ri);
-                                    runs.set(ri, new Run(r2.d, r2.km, r2.min, r2.m1, r2.m2, pinStr, r2.laps, r2.bpm));
+                                    runs.set(ri, new Run(r2.d, r2.km, r2.min, r2.m1, r2.m2, pinStr,
+                                            r2.laps, r2.bpm, r2.hrr60, r2.cadence, r2.outPace, r2.backPace));
                                     persist();
                                     break;
                                 }
@@ -1229,15 +1409,41 @@ public class RunStore {
                 if (prof.has("str_plank")) pe.putInt("str_plank", prof.optInt("str_plank", 0));
                 if (prof.has("water_hot")) pe.putBoolean("water_hot", prof.optBoolean("water_hot", false));
                 if (prof.has("crosite_stride_k")) pe.putFloat("crosite_stride_k", (float) prof.optDouble("crosite_stride_k", 1.0));
+                if (prof.has("coach_tts")) pe.putBoolean("coach_tts", prof.optBoolean("coach_tts", false));
+                if (prof.has("coach_metro_spm")) pe.putInt("coach_metro_spm", prof.optInt("coach_metro_spm", 172));
+                if (prof.has("coach_warmup_on")) pe.putBoolean("coach_warmup_on", prof.optBoolean("coach_warmup_on", false));
+                if (prof.has("coach_warmup_list")) pe.putString("coach_warmup_list", prof.optString("coach_warmup_list", ""));
                 pe.apply();
             }
             org.json.JSONArray pls = root.optJSONArray("pulse_log");
             if (pls != null && pls.length() > 0) {
                 PulseEngine.mergeLog(prefs, pls);
             }
+            org.json.JSONArray bls = root.optJSONArray("bolt_log");
+            if (bls != null && bls.length() > 0) {
+                mergeBoltLog(bls);
+            }
         } catch (Exception ignored) {
         }
         return c;
+    }
+
+    private void mergeBoltLog(JSONArray imported) {
+        try {
+            JSONArray cur = new JSONArray(prefs.getString("bolt_log", "[]"));
+            java.util.HashSet<Long> seen = new java.util.HashSet<Long>();
+            for (int i = 0; i < cur.length(); i++) seen.add(cur.getJSONObject(i).optLong("ts", 0L));
+            for (int i = 0; i < imported.length() && cur.length() < 120; i++) {
+                JSONObject o = imported.getJSONObject(i);
+                long ts = o.optLong("ts", 0L);
+                if (ts > 0 && !seen.contains(ts) && o.optInt("sec", 0) > 0) {
+                    cur.put(o);
+                    seen.add(ts);
+                }
+            }
+            prefs.edit().putString("bolt_log", cur.toString()).apply();
+        } catch (Exception ignored) {
+        }
     }
 
     public static String monthTitle(String ym) {
