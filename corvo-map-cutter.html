@@ -1,0 +1,2060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Corvo Map Cutter — Universal .cmap Builder</title>
+<style>
+  :root {
+    --bg: #05070B;
+    --panel: #0B1017;
+    --card: #101722;
+    --card2: #151E2C;
+    --border: #1E2B3E;
+    --text: #EEF3FA;
+    --muted: #7F91AB;
+    --accent: #00E5A0;
+    --accentDim: rgba(0, 229, 160, 0.14);
+    --blue: #38BDF8;
+    --amber: #FFB454;
+    --red: #FF5C77;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    overflow: hidden;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 372px 1fr;
+    height: 100dvh; width: 100vw;
+  }
+  .sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow-y: auto; padding: 14px 14px 20px;
+    gap: 11px;
+    overscroll-behavior: contain;
+  }
+  .stage {
+    position: relative; background: #04060A; overflow: hidden;
+    user-select: none; touch-action: none;
+  }
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: 54dvh 46dvh; }
+    .app.map-max { grid-template-rows: 84dvh 16dvh; }
+    .app.panel-max { grid-template-rows: 26dvh 74dvh; }
+    .stage { order: 1; }
+    .sidebar {
+      order: 2; border-right: none; border-top: 1px solid var(--border);
+      padding: 12px 12px 28px;
+    }
+  }
+  .brand {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 9px; border-bottom: 1px solid var(--border);
+    gap: 8px;
+  }
+  .brand-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    background: var(--accent); box-shadow: 0 0 12px var(--accent);
+  }
+  .brand h1 {
+    margin: 0; font-size: 14.5px; font-weight: 800; letter-spacing: 0.08em;
+    text-transform: uppercase; white-space: nowrap;
+  }
+  .badge {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+    padding: 3px 7px; border-radius: 999px; flex-shrink: 0;
+    background: var(--accentDim); color: var(--accent);
+    border: 1px solid rgba(0,229,160,0.3);
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 11px 12px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .label {
+    font-size: 10px; font-weight: 800; letter-spacing: 0.11em;
+    color: var(--muted); text-transform: uppercase;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .row { display: flex; gap: 6px; align-items: center; }
+  input[type="text"], select {
+    width: 100%; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 10px; font-size: 13px; outline: none; min-height: 38px;
+  }
+  input[type="text"]:focus, select:focus { border-color: var(--accent); }
+  button {
+    border: 1px solid var(--border); background: var(--card2); color: var(--text);
+    border-radius: 8px; padding: 8px 11px; font-size: 12px; font-weight: 700;
+    cursor: pointer; transition: 0.14s ease; white-space: nowrap; min-height: 36px;
+  }
+  button:hover { border-color: #314663; background: #1A2536; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-primary {
+    background: var(--accent); color: #04130D; border-color: var(--accent);
+    padding: 12px 14px; font-size: 13.5px; letter-spacing: 0.04em; min-height: 44px;
+    box-shadow: 0 4px 18px rgba(0, 229, 160, 0.22);
+  }
+  .btn-primary:hover { background: #1FF0B2; border-color: #1FF0B2; }
+  .btn-ghost { background: transparent; min-height: 28px; }
+  .seg {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;
+    background: var(--bg); padding: 4px; border-radius: 9px; border: 1px solid var(--border);
+  }
+  .seg button {
+    min-height: 32px; padding: 5px 6px; font-size: 11px;
+    background: transparent; border: 1px solid transparent; color: var(--muted);
+  }
+  .seg button.active {
+    background: var(--accentDim); color: var(--accent);
+    border-color: rgba(0,229,160,0.45);
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip {
+    font-size: 11px; font-weight: 600; padding: 5px 9px; border-radius: 7px;
+    background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+    cursor: pointer; min-height: 30px;
+  }
+  .chip:hover { color: var(--text); border-color: #364C6B; }
+  .chip.active {
+    background: var(--accentDim); color: var(--accent);
+    border-color: rgba(0,229,160,0.45);
+  }
+  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .chk {
+    display: flex; align-items: center; gap: 7px; font-size: 12px;
+    color: var(--text); cursor: pointer; user-select: none; min-height: 26px;
+  }
+  .chk input { accent-color: var(--accent); margin: 0; width: 15px; height: 15px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .stat {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 8px;
+  }
+  .stat .k { font-size: 9.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .stat .v { font-size: 12.5px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .prog-wrap {
+    width: 100%; height: 6px; background: var(--bg);
+    border-radius: 999px; overflow: hidden; border: 1px solid var(--border);
+    display: none;
+  }
+  .prog-bar { height: 100%; width: 0%; background: var(--accent); transition: width 0.15s ease; }
+  .msg {
+    font-size: 11.5px; line-height: 1.45; color: var(--muted);
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px;
+  }
+  .msg.ok { border-color: rgba(0,229,160,0.35); color: #A9F5DC; }
+  .msg.warn { border-color: rgba(255,180,84,0.35); color: #FFD7A3; }
+  .dropzone {
+    border: 1px dashed #2C3F59; border-radius: 9px; padding: 11px 10px;
+    text-align: center; font-size: 11.5px; color: var(--muted);
+    cursor: pointer; transition: 0.15s;
+  }
+  .dropzone:hover, .dropzone.drag {
+    border-color: var(--accent); color: var(--accent); background: var(--accentDim);
+  }
+
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+  canvas:active { cursor: grabbing; }
+  .hud-top {
+    position: absolute; top: 10px; left: 10px; right: 10px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    pointer-events: none; gap: 8px; flex-wrap: wrap;
+  }
+  .pill {
+    pointer-events: auto;
+    background: rgba(11, 16, 23, 0.9);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    border-radius: 999px; padding: 6px 11px;
+    font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .hud-tools {
+    display: flex; gap: 6px; pointer-events: auto; flex-wrap: wrap;
+  }
+  .hud-tools button {
+    min-height: 30px; padding: 4px 10px; font-size: 11px; border-radius: 999px;
+    background: rgba(11, 16, 23, 0.9);
+  }
+  .hud-zoom {
+    position: absolute; right: 10px; bottom: 14px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .hud-zoom button {
+    width: 38px; height: 38px; padding: 0; font-size: 18px;
+    background: rgba(11, 16, 23, 0.92); border-radius: 10px; min-height: 38px;
+  }
+  .hud-legend {
+    position: absolute; left: 10px; bottom: 12px;
+    background: rgba(11, 16, 23, 0.86);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 5px 9px; font-size: 10px; color: var(--muted);
+    display: flex; gap: 8px; flex-wrap: wrap; pointer-events: none; max-width: calc(100vw - 72px);
+  }
+  .lg { display: flex; align-items: center; gap: 4px; }
+  .sw { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+  .mode-banner {
+    display: none; align-items: center; gap: 8px;
+    background: rgba(0, 229, 160, 0.16); border: 1px solid rgba(0,229,160,0.45);
+    color: var(--accent); padding: 5px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 800; pointer-events: auto;
+  }
+  .mob-only { display: none; }
+  @media (max-width: 860px) {
+    .mob-only { display: inline-flex; }
+    .hud-legend { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="appRoot">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-left">
+        <span class="dot"></span>
+        <div>
+          <h1>Corvo Map Cutter</h1>
+          <div style="font-size:10.5px;color:var(--muted)">Phone + PC Universal · CMAP2</div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn-ghost mob-only" id="togglePanelBtn" style="padding:3px 9px;font-size:10.5px">Panel ⤢</button>
+        <span class="badge">OFFLINE</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">
+        <span>1. Search City or Paste Coords</span>
+        <span id="netStatus" style="color:var(--muted)">Ready</span>
+      </div>
+      <div class="row">
+        <input type="text" id="searchInput" placeholder="Agra, Taj Ganj or 27.175, 78.042">
+        <button id="searchBtn">Go</button>
+        <button id="gpsBtn" title="Center at current GPS">GPS</button>
+      </div>
+      <div class="chips" id="cityChips">
+        <button class="chip" data-lat="27.1751" data-lon="78.0421" data-name="Agra">Agra</button>
+        <button class="chip" data-lat="28.6139" data-lon="77.2090" data-name="New Delhi">Delhi</button>
+        <button class="chip" data-lat="12.9716" data-lon="77.5946" data-name="Bengaluru">Bengaluru</button>
+        <button class="chip" data-lat="19.0760" data-lon="72.8777" data-name="Mumbai">Mumbai</button>
+        <button class="chip" data-lat="51.5074" data-lon="-0.1278" data-name="London">London</button>
+        <button class="chip" data-lat="40.7731" data-lon="-73.9712" data-name="Central Park NY">NYC Park</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">
+        <span>2. Cut Footprint</span>
+        <span id="cutTileInfo" style="color:var(--accent)">3 × 3 tiles</span>
+      </div>
+      <div class="seg" id="cutModeSeg">
+        <button class="active" data-mode="square">Square</button>
+        <button data-mode="rect">Photo Crop</button>
+        <button data-mode="poly">Polygon</button>
+      </div>
+
+      <div id="squareControls">
+        <div class="chips" id="radiusChips">
+          <button class="chip" data-rad="1.2">~2.5 km</button>
+          <button class="chip active" data-rad="2.5">~6 km</button>
+          <button class="chip" data-rad="4.5">~10 km</button>
+          <button class="chip" data-rad="7.0">~15 km</button>
+          <button class="chip" data-rad="11.0">~24 km</button>
+        </div>
+      </div>
+
+      <div id="rectControls" style="display:none">
+        <div class="msg" style="padding:7px 9px;font-size:11px">
+          Drag the <b>4 mint corners or edges</b> on the map like cropping a photo. Unwanted outer streets are clipped out!
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button id="fitRectViewBtn" style="flex:1">Reset Crop to View</button>
+          <button id="centerRectBtn">Center Here</button>
+        </div>
+      </div>
+
+      <div id="polyControls" style="display:none">
+        <div class="msg" style="padding:7px 9px;font-size:11px">
+          <b>Tap points</b> on the map around your exact road/park loop. Drag any point to tweak, or drag empty area to pan.
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button id="polyUndoBtn" style="flex:1">Undo Point</button>
+          <button id="polyClearBtn" style="flex:1">Clear Shape</button>
+          <button id="polyPresetBtn" title="Create 4-point starter shape">Starter Box</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <select id="cutZoom" title="Detail zoom level packed into .cmap">
+          <option value="14" selected>z14 High Detail (Crisp run streets)</option>
+          <option value="13">z13 Wide Area (Smaller large cuts)</option>
+        </select>
+        <button id="recenterCutBtn" title="Pin cut footprint to current screen center">Pin Center</button>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Size</div><div class="v" id="stArea">6.5×6.5km</div></div>
+        <div class="stat"><div class="k">Tiles</div><div class="v" id="stTiles">9</div></div>
+        <div class="stat"><div class="k">Est .cmap</div><div class="v" id="stEst">~120 KB</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label"><span>3. Layers &amp; Compression</span></div>
+      <div class="checks">
+        <label class="chk"><input type="checkbox" id="optRoads" checked> Roads &amp; Streets</label>
+        <label class="chk"><input type="checkbox" id="optPaths" checked> Footpaths &amp; Trails</label>
+        <label class="chk"><input type="checkbox" id="optParks" checked> Parks &amp; Woods</label>
+        <label class="chk"><input type="checkbox" id="optWater" checked> Rivers &amp; Lakes</label>
+        <label class="chk"><input type="checkbox" id="optLabels" checked> Road &amp; Area Labels</label>
+        <label class="chk"><input type="checkbox" id="optBuildings"> Buildings (+size)</label>
+      </div>
+      <div class="row">
+        <input type="text" id="packNameInput" placeholder="Area name (e.g. Agra Taj Loop)">
+        <select id="simplifySel" style="width:134px" title="Geometry simplification">
+          <option value="2.0" selected>Clean (2px)</option>
+          <option value="3.5">Ultra-Lean</option>
+          <option value="0">Raw Exact</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="btn-primary" id="cutBtn">Cut &amp; Download .cmap</button>
+    <div class="prog-wrap" id="progWrap"><div class="prog-bar" id="progBar"></div></div>
+    <div class="msg" id="statusBox">
+      Use <b>Square</b> for quick cuts, <b>Photo Crop</b> to crop like an image, or <b>Polygon</b> to trace custom routes!
+    </div>
+
+    <div class="card">
+      <div class="label">
+        <span>4. Offline .cmap Inspector</span>
+        <button class="btn-ghost" id="demoCmapBtn" style="padding:2px 6px;font-size:10px">Load Demo .cmap</button>
+      </div>
+      <div class="dropzone" id="dropZone">
+        Drop or tap to open any <b>.cmap</b> file offline
+        <input type="file" id="fileInput" accept=".cmap,.gz,*/*" style="display:none">
+      </div>
+      <div id="inspectInfo" style="display:none;font-size:11px;color:var(--muted);line-height:1.45"></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="mapCanvas"></canvas>
+
+    <div class="hud-top">
+      <div class="pill" id="coordPill">
+        <span style="color:var(--accent)">●</span>
+        <span id="coordText">27.1751, 78.0421 · z14</span>
+      </div>
+      <div class="hud-tools">
+        <button class="mob-only" id="toggleMapSizeBtn" title="Expand map on phone">Map ⤢</button>
+        <button id="hudPolyUndoBtn" style="display:none;color:var(--amber)">Undo Pt</button>
+        <button id="hudPolyClearBtn" style="display:none;color:var(--red)">Clear</button>
+      </div>
+      <div class="mode-banner" id="modeBanner">
+        <span id="modeLabel">PREVIEWING .CMAP OFFLINE</span>
+        <button id="exitInspectBtn" style="padding:2px 8px;font-size:10.5px;min-height:24px;border-color:rgba(0,229,160,0.45)">Live Map</button>
+      </div>
+    </div>
+
+    <div class="hud-legend">
+      <span class="lg"><i class="sw" style="background:#00E5A0"></i>Trail/Path</span>
+      <span class="lg"><i class="sw" style="background:#587CA3"></i>Highway</span>
+      <span class="lg"><i class="sw" style="background:#385270"></i>Road</span>
+      <span class="lg"><i class="sw" style="background:#38BDF8"></i>Water</span>
+      <span class="lg"><i class="sw" style="background:#154734;height:7px"></i>Park</span>
+    </div>
+
+    <div class="hud-zoom">
+      <button id="zoomInBtn" title="Zoom in">+</button>
+      <button id="zoomOutBtn" title="Zoom out">−</button>
+      <button id="centerCutBtn" title="Jump to cut area" style="font-size:14px">◎</button>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---- CMAP Binary Constants (supports v1 & v2 cropPoly) ----
+  const KIND_WATER_POLY = 0x01;
+  const KIND_PARK_POLY  = 0x02;
+  const KIND_WATERWAY   = 0x03;
+  const KIND_BUILDING   = 0x04;
+  const KIND_HIGHWAY    = 0x10;
+  const KIND_MAJOR_ROAD = 0x11;
+  const KIND_MINOR_ROAD = 0x12;
+  const KIND_PATH       = 0x13;
+  const KIND_RAIL       = 0x14;
+  const KIND_PLACE_LBL  = 0x20;
+  const KIND_ROAD_LBL   = 0x21;
+
+  const GTYPE_POINT = 0;
+  const GTYPE_LINE  = 1;
+  const GTYPE_POLY  = 2;
+
+  const canvas = document.getElementById('mapCanvas');
+  const ctx = canvas ? canvas.getContext('2d') : null;
+  const $ = id => document.getElementById(id);
+
+  // ---- State ----
+  const state = {
+    lat: 27.1751,
+    lon: 78.0421,
+    zoom: 14.0,
+    cutMode: 'square', // 'square' | 'rect' | 'poly'
+    cutLat: 27.1751,
+    cutLon: 78.0421,
+    cutRadKm: 2.5,
+    cutZoom: 14,
+    // Photo Crop Rectangle bounds
+    cropRect: { minLat: 27.163, maxLat: 27.187, minLon: 78.027, maxLon: 78.057 },
+    // Custom Polygon vertices [[lat, lon], ...]
+    polyPts: [],
+    tileTemplate: null,
+    tileTemplatePromise: null,
+    tileCache: new Map(),
+    inspectCmap: null,
+    offlineHintShown: false,
+    // Multi-touch + drag state
+    ptrs: new Map(),
+    activeHandle: null, // { type: 'nw'|'ne'|'sw'|'se'|'n'|'s'|'e'|'w'|'box'|'polyPt', idx? }
+    dragMoved: false,
+    downX: 0,
+    downY: 0,
+    lastPinchDist: 0,
+    lastMidX: 0,
+    lastMidY: 0,
+    needRender: true
+  };
+
+  // ---- Web Mercator Math ----
+  const TILE_PX = 256;
+  const MAX_LAT = 85.05112878;
+  function clampLat(lat) { return Math.max(-MAX_LAT, Math.min(MAX_LAT, lat)); }
+  function clampLon(lon) { return Math.max(-180, Math.min(180, lon)); }
+  function lonToWorldX(lon, z) { return ((lon + 180) / 360) * Math.pow(2, z) * TILE_PX; }
+  function latToWorldY(lat, z) {
+    const rad = clampLat(lat) * Math.PI / 180;
+    const s = Math.sin(rad);
+    return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * Math.pow(2, z) * TILE_PX;
+  }
+  function worldXToLon(wx, z) { return clampLon((wx / (Math.pow(2, z) * TILE_PX)) * 360 - 180); }
+  function worldYToLat(wy, z) {
+    const n = Math.PI - (2 * Math.PI * wy) / (Math.pow(2, z) * TILE_PX);
+    return clampLat((180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))));
+  }
+  function latLonToTile(lat, lon, z) {
+    const n = Math.pow(2, z);
+    const tx = Math.floor(((lon + 180) / 360) * n);
+    const rad = clampLat(lat) * Math.PI / 180;
+    const ty = Math.floor((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * n);
+    return { tx: Math.max(0, Math.min(n - 1, tx)), ty: Math.max(0, Math.min(n - 1, ty)) };
+  }
+  function tileToLatLon(tx, ty, z) {
+    const n = Math.pow(2, z);
+    const lon = (tx / n) * 360 - 180;
+    const r = Math.PI - (2 * Math.PI * ty) / n;
+    const lat = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(r) - Math.exp(-r)));
+    return { lat, lon };
+  }
+  function kmPerTile(lat, z) {
+    return 40075.016686 * Math.cos(clampLat(lat) * Math.PI / 180) / Math.pow(2, z);
+  }
+  function lonToTileCoordX(lon, tx, z) {
+    const n = Math.pow(2, z);
+    return (((lon + 180) / 360) * n - tx) * 4096;
+  }
+  function latToTileCoordY(lat, ty, z) {
+    const n = Math.pow(2, z);
+    const rad = clampLat(lat) * Math.PI / 180;
+    const yt = (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * n;
+    return (yt - ty) * 4096;
+  }
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371.0;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // ---- Gzip Helpers ----
+  async function gzipBytes(uint8) {
+    if (typeof CompressionStream === 'undefined') {
+      throw new Error('Browser lacks CompressionStream(gzip). Use modern Chrome/Edge/Firefox/Safari.');
+    }
+    const cs = new CompressionStream('gzip');
+    const writer = cs.writable.getWriter();
+    writer.write(uint8);
+    writer.close();
+    const ab = await new Response(cs.readable).arrayBuffer();
+    return new Uint8Array(ab);
+  }
+  async function gunzipIfNeeded(uint8) {
+    if (uint8.length >= 2 && uint8[0] === 0x1f && uint8[1] === 0x8b) {
+      const ds = new DecompressionStream('gzip');
+      const writer = ds.writable.getWriter();
+      writer.write(uint8);
+      writer.close();
+      const ab = await new Response(ds.readable).arrayBuffer();
+      return new Uint8Array(ab);
+    }
+    return uint8;
+  }
+
+  // ---- Pure JS MVT (Protobuf v2) Decoder ----
+  const textDec = new TextDecoder('utf-8');
+  const textEnc = new TextEncoder();
+
+  function readVarint(buf, posObj) {
+    let val = 0, mul = 1, p = posObj.p;
+    while (p < buf.length) {
+      const b = buf[p++];
+      val += (b & 0x7f) * mul;
+      if (b < 0x80) { posObj.p = p; return val; }
+      mul *= 128;
+    }
+    posObj.p = p;
+    return val;
+  }
+  function readVarint32(buf, posObj) {
+    let res = 0, shift = 0, p = posObj.p;
+    while (p < buf.length) {
+      const b = buf[p++];
+      res |= (b & 0x7f) << shift;
+      if (b < 0x80) { posObj.p = p; return res >>> 0; }
+      shift += 7;
+    }
+    posObj.p = p;
+    return res >>> 0;
+  }
+  function zigzag32(n) { return (n >>> 1) ^ -(n & 1); }
+
+  function skipField(buf, pos, wt) {
+    if (wt === 0) readVarint(buf, pos);
+    else if (wt === 1) pos.p += 8;
+    else if (wt === 2) { const l = readVarint32(buf, pos); pos.p += l; }
+    else if (wt === 5) pos.p += 4;
+  }
+
+  function decodeMvtValue(buf, start, end) {
+    const pos = { p: start };
+    while (pos.p < end) {
+      const tag = readVarint32(buf, pos);
+      const fn = tag >>> 3, wt = tag & 7;
+      if (fn === 1 && wt === 2) {
+        const l = readVarint32(buf, pos);
+        return textDec.decode(buf.subarray(pos.p, pos.p + l));
+      } else if (fn === 2 && wt === 5) {
+        return new DataView(buf.buffer, buf.byteOffset + pos.p, 4).getFloat32(0, true);
+      } else if (fn === 3 && wt === 1) {
+        return new DataView(buf.buffer, buf.byteOffset + pos.p, 8).getFloat64(0, true);
+      } else if ((fn === 4 || fn === 5) && wt === 0) {
+        return readVarint(buf, pos);
+      } else if (fn === 6 && wt === 0) {
+        const v = readVarint(buf, pos);
+        return (v % 2 === 1) ? -((v + 1) / 2) : (v / 2);
+      } else if (fn === 7 && wt === 0) {
+        return readVarint(buf, pos) !== 0;
+      } else {
+        skipField(buf, pos, wt);
+      }
+    }
+    return '';
+  }
+
+  function decodeMvtLayer(buf, start, end) {
+    const pos = { p: start };
+    const layer = { name: '', extent: 4096, keys: [], vals: [], rawFeatures: [] };
+    while (pos.p < end) {
+      const tag = readVarint32(buf, pos);
+      const fn = tag >>> 3, wt = tag & 7;
+      if (fn === 1 && wt === 2) {
+        const l = readVarint32(buf, pos);
+        layer.name = textDec.decode(buf.subarray(pos.p, pos.p + l));
+        pos.p += l;
+      } else if (fn === 2 && wt === 2) {
+        const l = readVarint32(buf, pos);
+        layer.rawFeatures.push([pos.p, pos.p + l]);
+        pos.p += l;
+      } else if (fn === 3 && wt === 2) {
+        const l = readVarint32(buf, pos);
+        layer.keys.push(textDec.decode(buf.subarray(pos.p, pos.p + l)));
+        pos.p += l;
+      } else if (fn === 4 && wt === 2) {
+        const l = readVarint32(buf, pos);
+        layer.vals.push(decodeMvtValue(buf, pos.p, pos.p + l));
+        pos.p += l;
+      } else if (fn === 5 && wt === 0) {
+        layer.extent = readVarint32(buf, pos) || 4096;
+      } else {
+        skipField(buf, pos, wt);
+      }
+    }
+    return layer;
+  }
+
+  function decodeMvtTile(rawBytes) {
+    const len = rawBytes.length;
+    const layers = {};
+    const pos = { p: 0 };
+    while (pos.p < len) {
+      const tag = readVarint32(rawBytes, pos);
+      const fn = tag >>> 3, wt = tag & 7;
+      if (wt === 2) {
+        const lLen = readVarint32(rawBytes, pos);
+        const end = pos.p + lLen;
+        if (fn === 3) {
+          const layer = decodeMvtLayer(rawBytes, pos.p, end);
+          if (layer.name) layers[layer.name] = layer;
+        }
+        pos.p = end;
+      } else {
+        skipField(rawBytes, pos, wt);
+      }
+    }
+    return layers;
+  }
+
+  function decodeMvtFeature(buf, start, end, layer) {
+    const pos = { p: start };
+    let ftype = 0;
+    const props = {};
+    const geomCmds = [];
+    while (pos.p < end) {
+      const tag = readVarint32(buf, pos);
+      const fn = tag >>> 3, wt = tag & 7;
+      if (fn === 2 && wt === 2) {
+        const l = readVarint32(buf, pos);
+        const tEnd = pos.p + l;
+        while (pos.p < tEnd) {
+          const kIdx = readVarint32(buf, pos);
+          const vIdx = pos.p < tEnd ? readVarint32(buf, pos) : 0;
+          if (kIdx < layer.keys.length && vIdx < layer.vals.length) {
+            props[layer.keys[kIdx]] = layer.vals[vIdx];
+          }
+        }
+      } else if (fn === 3 && wt === 0) {
+        ftype = readVarint32(buf, pos);
+      } else if (fn === 4 && wt === 2) {
+        const l = readVarint32(buf, pos);
+        const gEnd = pos.p + l;
+        while (pos.p < gEnd) geomCmds.push(readVarint32(buf, pos));
+      } else {
+        skipField(buf, pos, wt);
+      }
+    }
+    const scale = 4096 / (layer.extent || 4096);
+    const rings = [];
+    let cur = [], cx = 0, cy = 0, i = 0;
+    while (i < geomCmds.length) {
+      const cmdInt = geomCmds[i++];
+      const cmd = cmdInt & 7;
+      const cnt = cmdInt >>> 3;
+      if (cmd === 1 || cmd === 2) {
+        if (cmd === 1 && cur.length > 0) { rings.push(cur); cur = []; }
+        for (let k = 0; k < cnt && i + 1 < geomCmds.length; k++) {
+          cx += zigzag32(geomCmds[i++]);
+          cy += zigzag32(geomCmds[i++]);
+          cur.push([Math.round(cx * scale), Math.round(cy * scale)]);
+        }
+      }
+    }
+    if (cur.length > 0) rings.push(cur);
+    return { ftype, props, rings };
+  }
+
+  // ---- Geometry Simplification & Exact Crop Clipping ----
+  function rdp(pts, eps) {
+    if (eps <= 0 || pts.length <= 2) return pts;
+    const x1 = pts[0][0], y1 = pts[0][1];
+    const x2 = pts[pts.length - 1][0], y2 = pts[pts.length - 1][1];
+    const dx = x2 - x1, dy = y2 - y1;
+    const d2 = dx * dx + dy * dy;
+    let best = -1, idx = 0;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const px = pts[i][0], py = pts[i][1];
+      const dist = d2 === 0
+        ? Math.hypot(px - x1, py - y1)
+        : Math.hypot(px - (x1 + Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / d2)) * dx),
+                     py - (y1 + Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / d2)) * dy));
+      if (dist > best) { best = dist; idx = i; }
+    }
+    if (best > eps) {
+      const a = rdp(pts.slice(0, idx + 1), eps);
+      const b = rdp(pts.slice(idx), eps);
+      return a.slice(0, -1).concat(b);
+    }
+    return [pts[0], pts[pts.length - 1]];
+  }
+
+  // Liang-Barsky segment clip to rect [minX, minY, maxX, maxY]
+  function clipSegRect(x0, y0, x1, y1, r) {
+    let t0 = 0, t1 = 1;
+    const dx = x1 - x0, dy = y1 - y0;
+    const checks = [[-dx, x0 - r.minX], [dx, r.maxX - x0], [-dy, y0 - r.minY], [dy, r.maxY - y0]];
+    for (const [p, q] of checks) {
+      if (p === 0) { if (q < 0) return null; }
+      else {
+        const t = q / p;
+        if (p < 0) { if (t > t1) return null; if (t > t0) t0 = t; }
+        else { if (t < t0) return null; if (t < t1) t1 = t; }
+      }
+    }
+    return [
+      [Math.round(x0 + t0 * dx), Math.round(y0 + t0 * dy)],
+      [Math.round(x0 + t1 * dx), Math.round(y0 + t1 * dy)]
+    ];
+  }
+
+  function clipPolylineRect(pts, r) {
+    const out = [];
+    let cur = null;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const seg = clipSegRect(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], r);
+      if (!seg) {
+        if (cur && cur.length >= 2) out.push(cur);
+        cur = null;
+        continue;
+      }
+      if (!cur) {
+        cur = [seg[0], seg[1]];
+      } else {
+        const last = cur[cur.length - 1];
+        if (Math.abs(last[0] - seg[0][0]) <= 1 && Math.abs(last[1] - seg[0][1]) <= 1) {
+          cur.push(seg[1]);
+        } else {
+          if (cur.length >= 2) out.push(cur);
+          cur = [seg[0], seg[1]];
+        }
+      }
+    }
+    if (cur && cur.length >= 2) out.push(cur);
+    return out;
+  }
+
+  // Sutherland-Hodgman polygon clip against axis-aligned rect
+  function clipPolygonRect(pts, r) {
+    if (pts.length < 3) return [];
+    const edges = [
+      { inside: p => p[0] >= r.minX, hit: (a, b) => [r.minX, a[1] + (b[1] - a[1]) * (r.minX - a[0]) / (b[0] - a[0])] },
+      { inside: p => p[0] <= r.maxX, hit: (a, b) => [r.maxX, a[1] + (b[1] - a[1]) * (r.maxX - a[0]) / (b[0] - a[0])] },
+      { inside: p => p[1] >= r.minY, hit: (a, b) => [a[0] + (b[0] - a[0]) * (r.minY - a[1]) / (b[1] - a[1]), r.minY] },
+      { inside: p => p[1] <= r.maxY, hit: (a, b) => [a[0] + (b[0] - a[0]) * (r.maxY - a[1]) / (b[1] - a[1]), r.maxY] }
+    ];
+    let out = pts;
+    for (const e of edges) {
+      if (out.length === 0) break;
+      const inp = out;
+      out = [];
+      let S = inp[inp.length - 1];
+      for (const E of inp) {
+        if (e.inside(E)) {
+          if (!e.inside(S)) out.push(e.hit(S, E).map(Math.round));
+          out.push([Math.round(E[0]), Math.round(E[1])]);
+        } else if (e.inside(S)) {
+          out.push(e.hit(S, E).map(Math.round));
+        }
+        S = E;
+      }
+    }
+    return out.length >= 3 ? out : [];
+  }
+
+  function pointInPoly(x, y, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1];
+      const xj = poly[j][0], yj = poly[j][1];
+      const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-9) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  // Exact polyline clip against arbitrary (convex or concave) polygon in tile coords
+  function clipPolylinePoly(pts, poly) {
+    const out = [];
+    let cur = null;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const x1 = pts[i][0], y1 = pts[i][1];
+      const x2 = pts[i + 1][0], y2 = pts[i + 1][1];
+      const dx = x2 - x1, dy = y2 - y1;
+      const ts = [0, 1];
+      for (let e = 0; e < poly.length; e++) {
+        const p3 = poly[e], p4 = poly[(e + 1) % poly.length];
+        const rx = p4[0] - p3[0], ry = p4[1] - p3[1];
+        const denom = dx * ry - dy * rx;
+        if (Math.abs(denom) < 1e-6) continue;
+        const qpx = p3[0] - x1, qpy = p3[1] - y1;
+        const t = (qpx * ry - qpy * rx) / denom;
+        const u = (qpx * dy - qpy * dx) / denom;
+        if (t > 1e-5 && t < 1 - 1e-5 && u >= -1e-5 && u <= 1 + 1e-5) ts.push(t);
+      }
+      ts.sort((a, b) => a - b);
+      for (let k = 0; k < ts.length - 1; k++) {
+        const ta = ts[k], tb = ts[k + 1];
+        if (tb - ta < 1e-4) continue;
+        const tm = (ta + tb) * 0.5;
+        const mx = x1 + tm * dx, my = y1 + tm * dy;
+        if (pointInPoly(mx, my, poly)) {
+          const pA = [Math.round(x1 + ta * dx), Math.round(y1 + ta * dy)];
+          const pB = [Math.round(x1 + tb * dx), Math.round(y1 + tb * dy)];
+          if (!cur) {
+            cur = [pA, pB];
+          } else {
+            const last = cur[cur.length - 1];
+            if (Math.abs(last[0] - pA[0]) <= 1 && Math.abs(last[1] - pA[1]) <= 1) {
+              cur.push(pB);
+            } else {
+              if (cur.length >= 2) out.push(cur);
+              cur = [pA, pB];
+            }
+          }
+        } else if (cur) {
+          if (cur.length >= 2) out.push(cur);
+          cur = null;
+        }
+      }
+    }
+    if (cur && cur.length >= 2) out.push(cur);
+    return out;
+  }
+
+  function clipFeatureList(features, tx, ty, tz, rectLatLon, polyLatLon) {
+    if (!rectLatLon && (!polyLatLon || polyLatLon.length < 3)) return features;
+    let r = null;
+    if (rectLatLon) {
+      r = {
+        minX: lonToTileCoordX(rectLatLon.minLon, tx, tz) - 6,
+        maxX: lonToTileCoordX(rectLatLon.maxLon, tx, tz) + 6,
+        minY: latToTileCoordY(rectLatLon.maxLat, ty, tz) - 6,
+        maxY: latToTileCoordY(rectLatLon.minLat, ty, tz) + 6
+      };
+    }
+    let polyXY = null;
+    if (polyLatLon && polyLatLon.length >= 3) {
+      polyXY = polyLatLon.map(([la, lo]) => [lonToTileCoordX(lo, tx, tz), latToTileCoordY(la, ty, tz)]);
+      let px1 = Infinity, py1 = Infinity, px2 = -Infinity, py2 = -Infinity;
+      for (const [px, py] of polyXY) {
+        if (px < px1) px1 = px; if (px > px2) px2 = px;
+        if (py < py1) py1 = py; if (py > py2) py2 = py;
+      }
+      r = { minX: px1 - 6, maxX: px2 + 6, minY: py1 - 6, maxY: py2 + 6 };
+    }
+
+    const out = [];
+    for (const f of features) {
+      if (f.gtype === GTYPE_POINT) {
+        const pt = f.rings[0] && f.rings[0][0];
+        if (!pt) continue;
+        if (polyXY) {
+          if (pointInPoly(pt[0], pt[1], polyXY)) out.push(f);
+        } else if (pt[0] >= r.minX && pt[0] <= r.maxX && pt[1] >= r.minY && pt[1] <= r.maxY) {
+          out.push(f);
+        }
+      } else if (f.gtype === GTYPE_LINE) {
+        let newRings = [];
+        for (const ring of f.rings) {
+          const clipped = polyXY ? clipPolylinePoly(ring, polyXY) : clipPolylineRect(ring, r);
+          for (const cr of clipped) if (cr.length >= 2) newRings.push(cr);
+        }
+        if (newRings.length > 0) out.push({ kind: f.kind, gtype: f.gtype, label: f.label, rings: newRings });
+      } else if (f.gtype === GTYPE_POLY) {
+        const newRings = [];
+        for (const ring of f.rings) {
+          const cr = clipPolygonRect(ring, r);
+          if (cr.length >= 3) newRings.push(cr);
+        }
+        if (newRings.length > 0) out.push({ kind: f.kind, gtype: f.gtype, label: f.label, rings: newRings });
+      }
+    }
+    return out;
+  }
+
+  function pickLabel(props) {
+    const s = props['name:en'] || props['name_int'] || props['name:latin'] || props['name'] || '';
+    return String(s).trim().slice(0, 44);
+  }
+
+  function extractCorvoFeatures(rawBuf, opts) {
+    const layers = decodeMvtTile(rawBuf);
+    const out = [];
+    const seenRoadNames = new Set();
+    const eps = opts.simplify;
+
+    const pushFeat = (kind, gtype, label, rings) => {
+      if (!rings || rings.length === 0) return;
+      out.push({ kind, gtype, label: label || '', rings });
+    };
+
+    if (opts.water && layers.water) {
+      const L = layers.water;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        if (f.ftype !== 3) continue;
+        pushFeat(KIND_WATER_POLY, GTYPE_POLY, '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 3));
+      }
+    }
+    if (opts.parks) {
+      if (layers.landcover) {
+        const L = layers.landcover;
+        for (const [s, e] of L.rawFeatures) {
+          const f = decodeMvtFeature(rawBuf, s, e, L);
+          if (f.ftype !== 3) continue;
+          const cls = f.props.class || '';
+          if (cls !== 'wood' && cls !== 'grass') continue;
+          pushFeat(KIND_PARK_POLY, GTYPE_POLY, '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 3));
+        }
+      }
+      if (layers.landuse) {
+        const L = layers.landuse;
+        for (const [s, e] of L.rawFeatures) {
+          const f = decodeMvtFeature(rawBuf, s, e, L);
+          if (f.ftype !== 3) continue;
+          const cls = f.props.class || '';
+          if (cls !== 'park' && cls !== 'cemetery' && cls !== 'pitch' && cls !== 'stadium' && cls !== 'recreation_ground') continue;
+          pushFeat(KIND_PARK_POLY, GTYPE_POLY, '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 3));
+        }
+      }
+      if (layers.park) {
+        const L = layers.park;
+        for (const [s, e] of L.rawFeatures) {
+          const f = decodeMvtFeature(rawBuf, s, e, L);
+          if (f.ftype === 3) {
+            pushFeat(KIND_PARK_POLY, GTYPE_POLY, opts.labels ? pickLabel(f.props) : '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 3));
+          } else if (f.ftype === 1 && opts.labels && f.rings[0] && f.rings[0][0]) {
+            const lbl = pickLabel(f.props);
+            if (lbl) pushFeat(KIND_PLACE_LBL, GTYPE_POINT, lbl, [[f.rings[0][0]]]);
+          }
+        }
+      }
+    }
+    if (opts.buildings && layers.building) {
+      const L = layers.building;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        if (f.ftype !== 3) continue;
+        pushFeat(KIND_BUILDING, GTYPE_POLY, '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 3));
+      }
+    }
+    if (opts.water && layers.waterway) {
+      const L = layers.waterway;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        if (f.ftype !== 2) continue;
+        pushFeat(KIND_WATERWAY, GTYPE_LINE, opts.labels ? pickLabel(f.props) : '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 2));
+      }
+    }
+    if ((opts.roads || opts.paths) && layers.transportation) {
+      const L = layers.transportation;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        if (f.ftype !== 2) continue;
+        const cls = f.props.class || '', sub = f.props.subclass || '';
+        if (cls === 'transit' && f.props.brunnel === 'tunnel') continue;
+        let kind = null;
+        if (cls === 'path' || cls === 'track' || cls === 'footway' || cls === 'cycleway' || sub === 'pedestrian' || sub === 'footway' || sub === 'steps') {
+          if (!opts.paths) continue; kind = KIND_PATH;
+        } else if (cls === 'motorway' || cls === 'trunk') {
+          if (!opts.roads) continue; kind = KIND_HIGHWAY;
+        } else if (cls === 'primary' || cls === 'secondary') {
+          if (!opts.roads) continue; kind = KIND_MAJOR_ROAD;
+        } else if (cls === 'rail' || cls === 'transit') {
+          if (!opts.roads) continue; kind = KIND_RAIL;
+        } else {
+          if (!opts.roads) continue; kind = KIND_MINOR_ROAD;
+        }
+        pushFeat(kind, GTYPE_LINE, '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 2));
+      }
+    }
+    if (opts.labels && layers.transportation_name) {
+      const L = layers.transportation_name;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        const lbl = pickLabel(f.props);
+        if (!lbl || seenRoadNames.has(lbl) || !f.rings[0] || !f.rings[0].length) continue;
+        const pts = f.rings[0], mid = pts[Math.floor(pts.length / 2)];
+        if (mid[0] < 120 || mid[0] > 3976 || mid[1] < 120 || mid[1] > 3976) continue;
+        seenRoadNames.add(lbl);
+        pushFeat(KIND_ROAD_LBL, GTYPE_POINT, lbl, [[mid]]);
+      }
+    }
+    if (opts.labels && layers.place) {
+      const L = layers.place;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        const lbl = pickLabel(f.props);
+        if (!lbl || !f.rings[0] || !f.rings[0][0]) continue;
+        pushFeat(KIND_PLACE_LBL, GTYPE_POINT, lbl, [[f.rings[0][0]]]);
+      }
+    }
+    return out;
+  }
+
+  // ---- CMAP Binary Writer & Reader (v1 & v2 cropPoly) ----
+  class BinWriter {
+    constructor(cap = 65536) {
+      this.buf = new Uint8Array(cap);
+      this.dv = new DataView(this.buf.buffer);
+      this.pos = 0;
+    }
+    ensure(n) {
+      if (this.pos + n <= this.buf.length) return;
+      let nextCap = this.buf.length * 2;
+      while (nextCap < this.pos + n) nextCap *= 2;
+      const nb = new Uint8Array(nextCap);
+      nb.set(this.buf.subarray(0, this.pos));
+      this.buf = nb;
+      this.dv = new DataView(this.buf.buffer);
+    }
+    u8(v)  { this.ensure(1); this.dv.setUint8(this.pos++, v & 0xff); }
+    u16(v) { this.ensure(2); this.dv.setUint16(this.pos, v & 0xffff, false); this.pos += 2; }
+    i16(v) { this.ensure(2); this.dv.setInt16(this.pos, Math.max(-32768, Math.min(32767, v | 0)), false); this.pos += 2; }
+    i32(v) { this.ensure(4); this.dv.setInt32(this.pos, v | 0, false); this.pos += 4; }
+    u32(v) { this.ensure(4); this.dv.setUint32(this.pos, v >>> 0, false); this.pos += 4; }
+    f32(v) { this.ensure(4); this.dv.setFloat32(this.pos, v, false); this.pos += 4; }
+    bytes(arr) { this.ensure(arr.length); this.buf.set(arr, this.pos); this.pos += arr.length; }
+    finish() { return this.buf.subarray(0, this.pos); }
+  }
+
+  async function encodeCmap(meta, tileList) {
+    const w = new BinWriter(131072);
+    const hasPoly = meta.cropPoly && meta.cropPoly.length >= 3;
+    w.u8(0x43); w.u8(0x4D); w.u8(0x41); w.u8(0x50);
+    w.u8(hasPoly ? 2 : 1);
+    w.u8(meta.zoom);
+    w.i32(meta.minX); w.i32(meta.minY);
+    w.u16(meta.cols); w.u16(meta.rows);
+    w.f32(meta.minLat); w.f32(meta.minLon);
+    w.f32(meta.maxLat); w.f32(meta.maxLon);
+    w.u32(Math.floor(Date.now() / 1000));
+    const nameBytes = textEnc.encode((meta.areaName || 'Corvo Area').slice(0, 120));
+    w.u16(nameBytes.length);
+    w.bytes(nameBytes);
+
+    if (hasPoly) {
+      w.u16(meta.cropPoly.length);
+      for (const [la, lo] of meta.cropPoly) { w.f32(la); w.f32(lo); }
+    }
+
+    const nonEmpty = tileList.filter(t => t.features && t.features.length > 0);
+    w.u16(nonEmpty.length);
+    for (const t of nonEmpty) {
+      w.i32(t.tx); w.i32(t.ty); w.u8(t.tz);
+      w.u16(t.features.length);
+      for (const f of t.features) {
+        const lblBytes = f.label ? textEnc.encode(f.label).subarray(0, 255) : null;
+        const flags = (f.gtype & 0x03) | (lblBytes && lblBytes.length > 0 ? 0x80 : 0);
+        w.u8(f.kind); w.u8(flags);
+        if (lblBytes && lblBytes.length > 0) { w.u8(lblBytes.length); w.bytes(lblBytes); }
+        w.u16(f.rings.length);
+        for (const r of f.rings) {
+          w.u16(r.length);
+          for (const pt of r) { w.i16(pt[0]); w.i16(pt[1]); }
+        }
+      }
+    }
+    const raw = w.finish();
+    const gz = await gzipBytes(raw);
+    return { rawBytes: raw.length, gzBytes: gz };
+  }
+
+  async function decodeCmap(fileBytes) {
+    const raw = await gunzipIfNeeded(fileBytes);
+    const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+    let p = 0;
+    if (raw.length < 35 || raw[0] !== 0x43 || raw[1] !== 0x4D || raw[2] !== 0x41 || raw[3] !== 0x50) {
+      throw new Error('Invalid file: missing CMAP header');
+    }
+    p = 4;
+    const version = dv.getUint8(p++);
+    if (version !== 1 && version !== 2) throw new Error('Unsupported CMAP version: ' + version);
+    const zoom = dv.getUint8(p++);
+    const minX = dv.getInt32(p, false); p += 4;
+    const minY = dv.getInt32(p, false); p += 4;
+    const cols = dv.getUint16(p, false); p += 2;
+    const rows = dv.getUint16(p, false); p += 2;
+    const minLat = dv.getFloat32(p, false); p += 4;
+    const minLon = dv.getFloat32(p, false); p += 4;
+    const maxLat = dv.getFloat32(p, false); p += 4;
+    const maxLon = dv.getFloat32(p, false); p += 4;
+    const created = dv.getUint32(p, false); p += 4;
+    const nameLen = dv.getUint16(p, false); p += 2;
+    const areaName = textDec.decode(raw.subarray(p, p + nameLen)); p += nameLen;
+
+    let cropPoly = null;
+    if (version >= 2) {
+      const pn = dv.getUint16(p, false); p += 2;
+      if (pn >= 3) {
+        cropPoly = [];
+        for (let i = 0; i < pn; i++) {
+          const la = dv.getFloat32(p, false); p += 4;
+          const lo = dv.getFloat32(p, false); p += 4;
+          cropPoly.push([la, lo]);
+        }
+      }
+    }
+
+    const tileCount = dv.getUint16(p, false); p += 2;
+    const tiles = new Map();
+    let totalFeatures = 0;
+    for (let ti = 0; ti < tileCount; ti++) {
+      const tx = dv.getInt32(p, false); p += 4;
+      const ty = dv.getInt32(p, false); p += 4;
+      const tz = dv.getUint8(p++);
+      const fCount = dv.getUint16(p, false); p += 2;
+      const features = [];
+      for (let fi = 0; fi < fCount; fi++) {
+        const kind = dv.getUint8(p++);
+        const flags = dv.getUint8(p++);
+        const gtype = flags & 0x03;
+        let label = '';
+        if (flags & 0x80) {
+          const ll = dv.getUint8(p++);
+          label = textDec.decode(raw.subarray(p, p + ll));
+          p += ll;
+        }
+        const rCount = dv.getUint16(p, false); p += 2;
+        const rings = [];
+        for (let ri = 0; ri < rCount; ri++) {
+          const ptCount = dv.getUint16(p, false); p += 2;
+          const pts = new Array(ptCount);
+          for (let pi = 0; pi < ptCount; pi++) {
+            const x = dv.getInt16(p, false); p += 2;
+            const y = dv.getInt16(p, false); p += 2;
+            pts[pi] = [x, y];
+          }
+          rings.push(pts);
+        }
+        features.push({ kind, gtype, label, rings });
+        totalFeatures++;
+      }
+      tiles.set(`${tz}/${tx}/${ty}`, { tx, ty, tz, features });
+    }
+    return {
+      version, zoom, minX, minY, cols, rows,
+      minLat, minLon, maxLat, maxLon, created, areaName, cropPoly,
+      tileCount, totalFeatures, rawLen: raw.length, gzLen: fileBytes.length, tiles
+    };
+  }
+
+  // ---- OpenFreeMap Tile Fetcher ----
+  async function getTileTemplate() {
+    if (state.tileTemplate) return state.tileTemplate;
+    if (state.tileTemplatePromise) return state.tileTemplatePromise;
+    state.tileTemplatePromise = (async () => {
+      try {
+        const res = await fetch('https://tiles.openfreemap.org/planet', { mode: 'cors' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const tj = await res.json();
+        if (!tj.tiles || !tj.tiles[0]) throw new Error('No tiles URL');
+        state.tileTemplate = tj.tiles[0];
+        $('netStatus').textContent = 'OpenFreeMap Live';
+        $('netStatus').style.color = 'var(--accent)';
+        return state.tileTemplate;
+      } catch (err) {
+        state.tileTemplatePromise = null;
+        $('netStatus').textContent = 'Offline / Blocked';
+        $('netStatus').style.color = 'var(--amber)';
+        if (!state.offlineHintShown) {
+          state.offlineHintShown = true;
+          setStatus('warn',
+            'Network unavailable in this preview iframe. Download this HTML and open in Chrome/Safari for live OpenFreeMap tiles — or click "Load Demo .cmap" below!');
+        }
+        throw err;
+      }
+    })();
+    return state.tileTemplatePromise;
+  }
+
+  function currentOpts() {
+    return {
+      roads: $('optRoads').checked,
+      paths: $('optPaths').checked,
+      parks: $('optParks').checked,
+      water: $('optWater').checked,
+      labels: $('optLabels').checked,
+      buildings: $('optBuildings').checked,
+      simplify: parseFloat($('simplifySel').value || '2')
+    };
+  }
+
+  async function fetchRawTileBytes(z, x, y) {
+    const tpl = await getTileTemplate();
+    const url = tpl.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+    const res = await fetch(url, { mode: 'cors' });
+    if (res.status === 204 || res.status === 404) return new Uint8Array(0);
+    if (!res.ok) throw new Error('Tile HTTP ' + res.status);
+    return gunzipIfNeeded(new Uint8Array(await res.arrayBuffer()));
+  }
+
+  let activeFetches = 0;
+  function requestPreviewTile(z, x, y) {
+    const key = `${z}/${x}/${y}`;
+    if (state.tileCache.has(key) || activeFetches > 14) return;
+    state.tileCache.set(key, { status: 'loading', features: [] });
+    activeFetches++;
+    fetchRawTileBytes(z, x, y)
+      .then(raw => {
+        const feats = raw.length > 0 ? extractCorvoFeatures(raw, currentOpts()) : [];
+        state.tileCache.set(key, { status: 'ready', rawBytes: raw.length, features: feats });
+        if (state.tileCache.size > 160) state.tileCache.delete(state.tileCache.keys().next().value);
+        state.needRender = true;
+      })
+      .catch(() => { state.tileCache.set(key, { status: 'err', features: [] }); })
+      .finally(() => { activeFetches--; });
+  }
+
+  // ---- Cut Footprint Calculation across Square / Photo Crop / Polygon ----
+  function computeCutGrid() {
+    const z = state.cutZoom;
+    const maxN = Math.pow(2, z) - 1;
+
+    if (state.cutMode === 'rect') {
+      const r = state.cropRect;
+      const minLat = Math.min(r.minLat, r.maxLat), maxLat = Math.max(r.minLat, r.maxLat);
+      const minLon = Math.min(r.minLon, r.maxLon), maxLon = Math.max(r.minLon, r.maxLon);
+      const nw = latLonToTile(maxLat, minLon, z);
+      const se = latLonToTile(minLat, maxLon, z);
+      const minX = Math.max(0, Math.min(nw.tx, se.tx)), maxX = Math.min(maxN, Math.max(nw.tx, se.tx));
+      const minY = Math.max(0, Math.min(nw.ty, se.ty)), maxY = Math.min(maxN, Math.max(nw.ty, se.ty));
+      const cols = maxX - minX + 1, rows = maxY - minY + 1;
+      const cLat = (minLat + maxLat) * 0.5;
+      const widthKm = haversineKm(cLat, minLon, cLat, maxLon);
+      const heightKm = haversineKm(minLat, minLon, maxLat, minLon);
+      return {
+        zoom: z, minX, minY, maxX, maxY, cols, rows, tileCount: cols * rows,
+        widthKm, heightKm, minLat, maxLat, minLon, maxLon,
+        exactRect: { minLat, maxLat, minLon, maxLon }, cropPoly: null
+      };
+    }
+
+    if (state.cutMode === 'poly' && state.polyPts.length >= 3) {
+      let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+      for (const [la, lo] of state.polyPts) {
+        if (la < minLat) minLat = la; if (la > maxLat) maxLat = la;
+        if (lo < minLon) minLon = lo; if (lo > maxLon) maxLon = lo;
+      }
+      const nw = latLonToTile(maxLat, minLon, z);
+      const se = latLonToTile(minLat, maxLon, z);
+      const minX = Math.max(0, Math.min(nw.tx, se.tx)), maxX = Math.min(maxN, Math.max(nw.tx, se.tx));
+      const minY = Math.max(0, Math.min(nw.ty, se.ty)), maxY = Math.min(maxN, Math.max(nw.ty, se.ty));
+      const cols = maxX - minX + 1, rows = maxY - minY + 1;
+      const cLat = (minLat + maxLat) * 0.5;
+      return {
+        zoom: z, minX, minY, maxX, maxY, cols, rows, tileCount: cols * rows,
+        widthKm: haversineKm(cLat, minLon, cLat, maxLon),
+        heightKm: haversineKm(minLat, minLon, maxLat, minLon),
+        minLat, maxLat, minLon, maxLon,
+        exactRect: null, cropPoly: state.polyPts.slice()
+      };
+    }
+
+    // Default Square mode
+    const kpt = kmPerTile(state.cutLat, z);
+    const halfTiles = Math.max(0, Math.round(state.cutRadKm / Math.max(0.2, kpt)));
+    const center = latLonToTile(state.cutLat, state.cutLon, z);
+    const minX = Math.max(0, center.tx - halfTiles), maxX = Math.min(maxN, center.tx + halfTiles);
+    const minY = Math.max(0, center.ty - halfTiles), maxY = Math.min(maxN, center.ty + halfTiles);
+    const cols = maxX - minX + 1, rows = maxY - minY + 1;
+    const nw = tileToLatLon(minX, minY, z), se = tileToLatLon(maxX + 1, maxY + 1, z);
+    return {
+      zoom: z, minX, minY, maxX, maxY, cols, rows, tileCount: cols * rows,
+      widthKm: cols * kpt, heightKm: rows * kpt,
+      minLat: se.lat, maxLat: nw.lat, minLon: nw.lon, maxLon: se.lon,
+      exactRect: null, cropPoly: null
+    };
+  }
+
+  function updateCutMetrics() {
+    const g = computeCutGrid();
+    const isPolyEmpty = state.cutMode === 'poly' && state.polyPts.length < 3;
+    $('cutTileInfo').textContent = isPolyEmpty
+      ? `${state.polyPts.length}/3+ pts`
+      : `${g.cols} × ${g.rows} tiles (z${g.zoom})`;
+    $('stArea').textContent = isPolyEmpty ? 'Tap 3+ pts' : `${g.widthKm.toFixed(1)}×${g.heightKm.toFixed(1)}km`;
+    $('stTiles').textContent = isPolyEmpty ? '0' : String(g.tileCount);
+    const bPerTile = ($('optBuildings').checked ? 16 : 9) * (state.cutMode === 'square' ? 1 : 0.65);
+    const estKb = isPolyEmpty ? 0 : Math.max(4, Math.round(g.tileCount * bPerTile));
+    $('stEst').textContent = estKb >= 1024 ? `~${(estKb / 1024).toFixed(1)} MB` : `~${estKb} KB`;
+    $('stEst').style.color = estKb > 5000 ? 'var(--amber)' : 'var(--accent)';
+    state.needRender = true;
+  }
+
+  function resetRectToView() {
+    const rect = canvas.getBoundingClientRect();
+    const padX = Math.max(36, rect.width * 0.16), padY = Math.max(36, rect.height * 0.16);
+    const cWX = lonToWorldX(state.lon, state.zoom), cWY = latToWorldY(state.lat, state.zoom);
+    const tlWX = cWX - rect.width / 2, tlWY = cWY - rect.height / 2;
+    state.cropRect = {
+      minLon: worldXToLon(tlWX + padX, state.zoom),
+      maxLon: worldXToLon(tlWX + rect.width - padX, state.zoom),
+      maxLat: worldYToLat(tlWY + padY, state.zoom),
+      minLat: worldYToLat(tlWY + rect.height - padY, state.zoom)
+    };
+    updateCutMetrics();
+  }
+
+  function makeStarterPolygon() {
+    const rect = canvas.getBoundingClientRect();
+    const rx = Math.max(40, rect.width * 0.22), ry = Math.max(40, rect.height * 0.22);
+    const cWX = lonToWorldX(state.lon, state.zoom), cWY = latToWorldY(state.lat, state.zoom);
+    state.polyPts = [
+      [worldYToLat(cWY - ry, state.zoom), worldXToLon(cWX - rx, state.zoom)],
+      [worldYToLat(cWY - ry, state.zoom), worldXToLon(cWX + rx, state.zoom)],
+      [worldYToLat(cWY + ry, state.zoom), worldXToLon(cWX + rx, state.zoom)],
+      [worldYToLat(cWY + ry, state.zoom), worldXToLon(cWX - rx, state.zoom)]
+    ];
+    updateCutMetrics();
+  }
+
+  // ---- Canvas Renderer ----
+  function resizeCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    state.needRender = true;
+  }
+
+  function drawFeatureTile(features, sx, sy, pxSize, drawLabels, labelsOut) {
+    const k = pxSize / 4096;
+    for (const f of features) {
+      if (f.gtype === GTYPE_POLY) {
+        ctx.beginPath();
+        for (const r of f.rings) {
+          if (r.length < 3) continue;
+          ctx.moveTo(sx + r[0][0] * k, sy + r[0][1] * k);
+          for (let i = 1; i < r.length; i++) ctx.lineTo(sx + r[i][0] * k, sy + r[i][1] * k);
+          ctx.closePath();
+        }
+        if (f.kind === KIND_WATER_POLY) { ctx.fillStyle = '#0B233B'; ctx.fill(); }
+        else if (f.kind === KIND_PARK_POLY) {
+          ctx.fillStyle = '#0C241D'; ctx.fill();
+          if (drawLabels && f.label && f.rings[0] && f.rings[0].length >= 3) {
+            let ax = 0, ay = 0; const r0 = f.rings[0];
+            for (let i = 0; i < r0.length; i++) { ax += r0[i][0]; ay += r0[i][1]; }
+            labelsOut.push({ text: f.label, kind: KIND_PLACE_LBL, x: sx + (ax / r0.length) * k, y: sy + (ay / r0.length) * k });
+          }
+        } else if (f.kind === KIND_BUILDING) { ctx.fillStyle = '#131A26'; ctx.fill(); }
+      } else if (f.gtype === GTYPE_LINE) {
+        ctx.beginPath();
+        for (const r of f.rings) {
+          if (r.length < 2) continue;
+          ctx.moveTo(sx + r[0][0] * k, sy + r[0][1] * k);
+          for (let i = 1; i < r.length; i++) ctx.lineTo(sx + r[i][0] * k, sy + r[i][1] * k);
+        }
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        if (f.kind === KIND_WATERWAY) {
+          ctx.strokeStyle = '#2A8EC2'; ctx.lineWidth = Math.max(1, pxSize * 0.0045); ctx.setLineDash([]);
+          if (drawLabels && f.label && f.rings[0] && f.rings[0].length >= 2) {
+            const m = f.rings[0][Math.floor(f.rings[0].length / 2)];
+            labelsOut.push({ text: f.label, kind: KIND_ROAD_LBL, x: sx + m[0] * k, y: sy + m[1] * k });
+          }
+        } else if (f.kind === KIND_HIGHWAY) {
+          ctx.strokeStyle = '#587CA3'; ctx.lineWidth = Math.max(1.8, pxSize * 0.011); ctx.setLineDash([]);
+        } else if (f.kind === KIND_MAJOR_ROAD) {
+          ctx.strokeStyle = '#385270'; ctx.lineWidth = Math.max(1.3, pxSize * 0.0075); ctx.setLineDash([]);
+        } else if (f.kind === KIND_MINOR_ROAD) {
+          ctx.strokeStyle = '#203044'; ctx.lineWidth = Math.max(0.8, pxSize * 0.004); ctx.setLineDash([]);
+        } else if (f.kind === KIND_PATH) {
+          ctx.strokeStyle = '#00E5A0'; ctx.lineWidth = Math.max(1.1, pxSize * 0.0045); ctx.setLineDash([4, 3]);
+        } else if (f.kind === KIND_RAIL) {
+          ctx.strokeStyle = '#3A314A'; ctx.lineWidth = Math.max(0.9, pxSize * 0.0035); ctx.setLineDash([5, 4]);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else if (f.gtype === GTYPE_POINT && drawLabels && f.label && f.rings[0] && f.rings[0][0]) {
+        const pt = f.rings[0][0];
+        labelsOut.push({ text: f.label, kind: f.kind, x: sx + pt[0] * k, y: sy + pt[1] * k });
+      }
+    }
+  }
+
+  function renderFrame() {
+    if (!state.needRender) { requestAnimationFrame(renderFrame); return; }
+    state.needRender = false;
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width, h = rect.height;
+
+    ctx.fillStyle = '#05080D';
+    ctx.fillRect(0, 0, w, h);
+
+    const z = state.zoom;
+    const centerWX = lonToWorldX(state.lon, z);
+    const centerWY = latToWorldY(state.lat, z);
+    const topLeftWX = centerWX - w / 2;
+    const topLeftWY = centerWY - h / 2;
+
+    const dispZ = state.inspectCmap ? state.inspectCmap.zoom : Math.max(10, Math.min(14, Math.round(z)));
+    const tilePx = TILE_PX * Math.pow(2, z - dispZ);
+    const nDisp = Math.pow(2, dispZ);
+    const scaleFactor = Math.pow(2, dispZ - z);
+    const minTX = Math.max(0, Math.floor((topLeftWX * scaleFactor) / TILE_PX));
+    const maxTX = Math.min(nDisp - 1, Math.floor(((topLeftWX + w) * scaleFactor) / TILE_PX));
+    const minTY = Math.max(0, Math.floor((topLeftWY * scaleFactor) / TILE_PX));
+    const maxTY = Math.min(nDisp - 1, Math.floor(((topLeftWY + h) * scaleFactor) / TILE_PX));
+
+    // Clip to inspected CMAP polygon/rect when viewing offline file
+    const inspecting = !!state.inspectCmap;
+    if (inspecting) {
+      ctx.save();
+      ctx.beginPath();
+      if (state.inspectCmap.cropPoly && state.inspectCmap.cropPoly.length >= 3) {
+        const cp = state.inspectCmap.cropPoly;
+        ctx.moveTo(lonToWorldX(cp[0][1], z) - topLeftWX, latToWorldY(cp[0][0], z) - topLeftWY);
+        for (let i = 1; i < cp.length; i++) ctx.lineTo(lonToWorldX(cp[i][1], z) - topLeftWX, latToWorldY(cp[i][0], z) - topLeftWY);
+        ctx.closePath();
+      } else {
+        const bx1 = lonToWorldX(state.inspectCmap.minLon, z) - topLeftWX;
+        const by1 = latToWorldY(state.inspectCmap.maxLat, z) - topLeftWY;
+        const bx2 = lonToWorldX(state.inspectCmap.maxLon, z) - topLeftWX;
+        const by2 = latToWorldY(state.inspectCmap.minLat, z) - topLeftWY;
+        ctx.rect(bx1, by1, bx2 - bx1, by2 - by1);
+      }
+      ctx.clip();
+    }
+
+    const labels = [];
+    for (let ty = minTY; ty <= maxTY; ty++) {
+      for (let tx = minTX; tx <= maxTX; tx++) {
+        const sx = tx * tilePx - topLeftWX;
+        const sy = ty * tilePx - topLeftWY;
+        ctx.strokeStyle = 'rgba(30, 43, 62, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(sx, sy, tilePx, tilePx);
+
+        const key = `${dispZ}/${tx}/${ty}`;
+        if (inspecting) {
+          const entry = state.inspectCmap.tiles.get(key);
+          if (entry) drawFeatureTile(entry.features, sx, sy, tilePx, $('optLabels').checked, labels);
+        } else {
+          let entry = state.tileCache.get(key);
+          if (!entry && z >= 10) {
+            requestPreviewTile(dispZ, tx, ty);
+            entry = state.tileCache.get(key);
+          }
+          if (entry && entry.status === 'ready') {
+            drawFeatureTile(entry.features, sx, sy, tilePx, $('optLabels').checked, labels);
+          }
+        }
+      }
+    }
+
+    if (inspecting) ctx.restore();
+
+    // De-cluttered labels
+    if (labels.length > 0) {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const placed = [];
+      labels.sort((a, b) => a.kind - b.kind);
+      for (const lb of labels) {
+        if (lb.x < 20 || lb.x > w - 20 || lb.y < 14 || lb.y > h - 14) continue;
+        let clash = false;
+        for (const p of placed) {
+          if (Math.abs(p.x - lb.x) < 76 && Math.abs(p.y - lb.y) < 18) { clash = true; break; }
+        }
+        if (clash) continue;
+        placed.push(lb);
+        if (lb.kind === KIND_PLACE_LBL) {
+          ctx.font = '700 11.5px -apple-system, BlinkMacSystemFont, sans-serif';
+          ctx.lineWidth = 3; ctx.strokeStyle = '#05080D'; ctx.strokeText(lb.text, lb.x, lb.y);
+          ctx.fillStyle = '#D7E5F7'; ctx.fillText(lb.text, lb.x, lb.y);
+        } else {
+          ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+          ctx.lineWidth = 2.5; ctx.strokeStyle = '#05080D'; ctx.strokeText(lb.text, lb.x, lb.y);
+          ctx.fillStyle = '#7E95B3'; ctx.fillText(lb.text, lb.x, lb.y);
+        }
+      }
+    }
+
+    // ---- Draw Active Cut Footprint / Photo Crop Box / Polygon ----
+    if (inspecting) {
+      drawInspectOutline(w, h, z, topLeftWX, topLeftWY, state.inspectCmap);
+    } else if (state.cutMode === 'poly') {
+      drawPolygonOverlay(w, h, z, topLeftWX, topLeftWY);
+    } else {
+      const box = computeCutGrid();
+      const bx1 = lonToWorldX(box.minLon, z) - topLeftWX;
+      const by1 = latToWorldY(box.maxLat, z) - topLeftWY;
+      const bx2 = lonToWorldX(box.maxLon, z) - topLeftWX;
+      const by2 = latToWorldY(box.minLat, z) - topLeftWY;
+      const bw = bx2 - bx1, bh = by2 - by1;
+
+      ctx.fillStyle = 'rgba(4, 7, 12, 0.5)';
+      ctx.beginPath();
+      ctx.rect(0, 0, w, h);
+      ctx.rect(bx1, by1, bw, bh);
+      ctx.fill('evenodd');
+
+      ctx.strokeStyle = '#00E5A0';
+      ctx.lineWidth = 2;
+      ctx.setLineDash(state.cutMode === 'rect' ? [] : [7, 5]);
+      ctx.strokeRect(bx1, by1, bw, bh);
+      ctx.setLineDash([]);
+
+      if (state.cutMode === 'rect') {
+        // Photo-crop rule-of-thirds faint grid + 4 corner L-handles + 4 edge bars
+        ctx.strokeStyle = 'rgba(0, 229, 160, 0.18)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(bx1 + bw / 3, by1); ctx.lineTo(bx1 + bw / 3, by2);
+        ctx.moveTo(bx1 + bw * 2 / 3, by1); ctx.lineTo(bx1 + bw * 2 / 3, by2);
+        ctx.moveTo(bx1, by1 + bh / 3); ctx.lineTo(bx2, by1 + bh / 3);
+        ctx.moveTo(bx1, by1 + bh * 2 / 3); ctx.lineTo(bx2, by1 + bh * 2 / 3);
+        ctx.stroke();
+
+        const corners = [[bx1, by1], [bx2, by1], [bx1, by2], [bx2, by2]];
+        for (const [cx, cy] of corners) {
+          ctx.fillStyle = '#05080D';
+          ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#00E5A0'; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI * 2); ctx.stroke();
+        }
+        const edges = [[(bx1 + bx2) / 2, by1], [(bx1 + bx2) / 2, by2], [bx1, (by1 + by2) / 2], [bx2, (by1 + by2) / 2]];
+        for (const [ex, ey] of edges) {
+          ctx.fillStyle = '#00E5A0';
+          ctx.beginPath(); ctx.arc(ex, ey, 4.5, 0, Math.PI * 2); ctx.fill();
+        }
+      } else {
+        const px = lonToWorldX(state.cutLon, z) - topLeftWX;
+        const py = latToWorldY(state.cutLat, z) - topLeftWY;
+        ctx.strokeStyle = 'rgba(0, 229, 160, 0.75)'; ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(px - 8, py); ctx.lineTo(px + 8, py);
+        ctx.moveTo(px, py - 8); ctx.lineTo(px, py + 8);
+        ctx.stroke();
+      }
+    }
+
+    $('coordText').textContent = `${state.lat.toFixed(4)}, ${state.lon.toFixed(4)} · z${state.zoom.toFixed(1)}`;
+    requestAnimationFrame(renderFrame);
+  }
+
+  function drawInspectOutline(w, h, z, topLeftWX, topLeftWY, cmap) {
+    ctx.strokeStyle = '#00E5A0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (cmap.cropPoly && cmap.cropPoly.length >= 3) {
+      const cp = cmap.cropPoly;
+      ctx.moveTo(lonToWorldX(cp[0][1], z) - topLeftWX, latToWorldY(cp[0][0], z) - topLeftWY);
+      for (let i = 1; i < cp.length; i++) ctx.lineTo(lonToWorldX(cp[i][1], z) - topLeftWX, latToWorldY(cp[i][0], z) - topLeftWY);
+      ctx.closePath();
+    } else {
+      const bx1 = lonToWorldX(cmap.minLon, z) - topLeftWX;
+      const by1 = latToWorldY(cmap.maxLat, z) - topLeftWY;
+      const bx2 = lonToWorldX(cmap.maxLon, z) - topLeftWX;
+      const by2 = latToWorldY(cmap.minLat, z) - topLeftWY;
+      ctx.rect(bx1, by1, bx2 - bx1, by2 - by1);
+    }
+    ctx.stroke();
+  }
+
+  function drawPolygonOverlay(w, h, z, topLeftWX, topLeftWY) {
+    const pts = state.polyPts.map(([la, lo]) => [lonToWorldX(lo, z) - topLeftWX, latToWorldY(la, z) - topLeftWY]);
+    if (pts.length >= 3) {
+      ctx.fillStyle = 'rgba(4, 7, 12, 0.5)';
+      ctx.beginPath();
+      ctx.rect(0, 0, w, h);
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.fill('evenodd');
+    }
+    if (pts.length >= 2) {
+      ctx.strokeStyle = '#00E5A0';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      if (pts.length >= 3) ctx.closePath();
+      ctx.stroke();
+    }
+    for (let i = 0; i < pts.length; i++) {
+      const [px, py] = pts[i];
+      ctx.fillStyle = '#05080D';
+      ctx.beginPath(); ctx.arc(px, py, 7.5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = i === 0 ? '#FFB454' : '#00E5A0';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(px, py, 7.5, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+
+  // ---- UI & Search Helpers ----
+  function setStatus(cls, text) {
+    const el = $('statusBox');
+    el.className = 'msg' + (cls ? ' ' + cls : '');
+    el.textContent = text;
+  }
+
+  function setCutMode(mode) {
+    state.cutMode = mode;
+    $('cutModeSeg').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    $('squareControls').style.display = mode === 'square' ? 'block' : 'none';
+    $('rectControls').style.display   = mode === 'rect' ? 'block' : 'none';
+    $('polyControls').style.display   = mode === 'poly' ? 'block' : 'none';
+    $('hudPolyUndoBtn').style.display  = mode === 'poly' ? 'inline-flex' : 'none';
+    $('hudPolyClearBtn').style.display = mode === 'poly' ? 'inline-flex' : 'none';
+    if (mode === 'rect') resetRectToView();
+    else updateCutMetrics();
+  }
+
+  function jumpTo(lat, lon, label, zoom) {
+    state.lat = clampLat(lat);
+    state.lon = clampLon(lon);
+    if (!state.inspectCmap) {
+      state.cutLat = state.lat;
+      state.cutLon = state.lon;
+    }
+    if (zoom) state.zoom = zoom;
+    if (label && !$('packNameInput').value.trim()) $('packNameInput').value = label;
+    if (state.cutMode === 'rect') resetRectToView();
+    else updateCutMetrics();
+  }
+
+  async function handleSearch() {
+    const q = $('searchInput').value.trim();
+    if (!q) return;
+    const coordMatch = q.match(/@?\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)/);
+    if (coordMatch) {
+      const lat = parseFloat(coordMatch[1]), lon = parseFloat(coordMatch[2]);
+      if (Math.abs(lat) <= 85 && Math.abs(lon) <= 180) {
+        $('packNameInput').value = `Area ${lat.toFixed(2)},${lon.toFixed(2)}`;
+        jumpTo(lat, lon, null, Math.max(state.zoom, 13.8));
+        setStatus('ok', `Jumped to ${lat.toFixed(4)}, ${lon.toFixed(4)}.`);
+        return;
+      }
+    }
+    try {
+      setStatus('', `Searching "${q}"...`);
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const arr = await res.json();
+      if (!arr || !arr.length) { setStatus('warn', `No match for "${q}". Try city name or paste lat, lon.`); return; }
+      const hit = arr[0], lat = parseFloat(hit.lat), lon = parseFloat(hit.lon);
+      const shortName = (hit.display_name || q).split(',')[0].trim();
+      $('packNameInput').value = shortName;
+      jumpTo(lat, lon, shortName, 13.8);
+      setStatus('ok', `Centered on ${shortName} (${lat.toFixed(4)}, ${lon.toFixed(4)}).`);
+    } catch (e) {
+      setStatus('warn', 'Search needs internet — paste "lat, lon" directly or tap a city chip.');
+    }
+  }
+
+  // ---- Cut & Download .cmap ----
+  async function runCutAndDownload() {
+    if (state.cutMode === 'poly' && state.polyPts.length < 3) {
+      setStatus('warn', 'Polygon needs at least 3 tapped points on the map!');
+      return;
+    }
+    const g = computeCutGrid();
+    if (g.tileCount > 64) {
+      setStatus('warn', `Selected ${g.tileCount} tiles! Zoom to z13 or shrink crop area (<= 64 tiles).`);
+      return;
+    }
+    const opts = currentOpts();
+    const btn = $('cutBtn'), progWrap = $('progWrap'), progBar = $('progBar');
+    btn.disabled = true;
+    progWrap.style.display = 'block';
+    progBar.style.width = '4%';
+
+    try {
+      await getTileTemplate();
+      const jobs = [];
+      for (let ty = g.minY; ty <= g.maxY; ty++) {
+        for (let tx = g.minX; tx <= g.maxX; tx++) jobs.push({ tx, ty, tz: g.zoom });
+      }
+      let done = 0, totalRawBytes = 0, totalFeatures = 0;
+      const results = new Array(jobs.length);
+      let cursor = 0;
+
+      async function worker() {
+        while (cursor < jobs.length) {
+          const idx = cursor++, j = jobs[idx];
+          const raw = await fetchRawTileBytes(j.tz, j.tx, j.ty);
+          totalRawBytes += raw.length;
+          let features = raw.length > 0 ? extractCorvoFeatures(raw, opts) : [];
+          if (g.exactRect || g.cropPoly) {
+            features = clipFeatureList(features, j.tx, j.ty, j.tz, g.exactRect, g.cropPoly);
+          }
+          totalFeatures += features.length;
+          results[idx] = { tx: j.tx, ty: j.ty, tz: j.tz, features };
+          done++;
+          progBar.style.width = Math.round((done / jobs.length) * 85) + '%';
+          setStatus('', `Cutting tiles: ${done}/${jobs.length} (${(totalRawBytes / 1024).toFixed(0)} KB fetched)...`);
+        }
+      }
+
+      await Promise.all([worker(), worker(), worker(), worker()]);
+      progBar.style.width = '94%';
+      setStatus('', 'Compressing CMAP binary...');
+
+      const areaName = ($('packNameInput').value.trim() || `Corvo ${((g.minLat + g.maxLat) * 0.5).toFixed(2)},${((g.minLon + g.maxLon) * 0.5).toFixed(2)}`);
+      const packed = await encodeCmap({
+        zoom: g.zoom, minX: g.minX, minY: g.minY, cols: g.cols, rows: g.rows,
+        minLat: g.minLat, minLon: g.minLon, maxLat: g.maxLat, maxLon: g.maxLon,
+        areaName, cropPoly: g.cropPoly
+      }, results);
+
+      progBar.style.width = '100%';
+      const slug = areaName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'corvo-area';
+      const filename = `${slug}-z${g.zoom}.cmap`;
+
+      const blob = new Blob([packed.gzBytes], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+
+      const parsed = await decodeCmap(packed.gzBytes);
+      enterInspectMode(parsed, filename);
+      setStatus('ok',
+        `Saved ${filename} (${(packed.gzBytes.length / 1024).toFixed(1)} KB from ${(totalRawBytes / 1024).toFixed(1)} KB raw · ` +
+        `${totalFeatures} features clipped cleanly). Previewing exact offline .cmap!`);
+    } catch (err) {
+      setStatus('warn', 'Cut failed: ' + (err.message || err));
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { progWrap.style.display = 'none'; progBar.style.width = '0%'; }, 900);
+    }
+  }
+
+  // ---- Offline Inspector & Sample Generator ----
+  function enterInspectMode(cmap, filename) {
+    state.inspectCmap = cmap;
+    state.lat = (cmap.minLat + cmap.maxLat) / 2;
+    state.lon = (cmap.minLon + cmap.maxLon) / 2;
+    state.zoom = Math.max(12.2, cmap.zoom - 0.35);
+    $('modeLabel').textContent = `OFFLINE: ${cmap.areaName} (${(cmap.gzLen / 1024).toFixed(1)} KB)`;
+    $('modeBanner').style.display = 'flex';
+    $('inspectInfo').style.display = 'block';
+    const wKm = haversineKm(state.lat, cmap.minLon, state.lat, cmap.maxLon).toFixed(1);
+    const hKm = haversineKm(cmap.minLat, cmap.minLon, cmap.maxLat, cmap.minLon).toFixed(1);
+    $('inspectInfo').innerHTML =
+      `<b style="color:var(--accent)">${escapeHtml(filename)}</b> (CMAP v${cmap.version})<br>` +
+      `Area: <b>${escapeHtml(cmap.areaName)}</b> · ${wKm}×${hKm} km (z${cmap.zoom})<br>` +
+      `Size: <b>${(cmap.gzLen / 1024).toFixed(1)} KB</b> gzipped · <b>${cmap.totalFeatures}</b> features`;
+    state.needRender = true;
+  }
+
+  function exitInspectMode() {
+    state.inspectCmap = null;
+    $('modeBanner').style.display = 'none';
+    state.needRender = true;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  async function inspectUploadedFile(file) {
+    try {
+      const parsed = await decodeCmap(new Uint8Array(await file.arrayBuffer()));
+      enterInspectMode(parsed, file.name);
+      setStatus('ok', `Loaded offline .cmap "${file.name}" (${parsed.totalFeatures} features).`);
+    } catch (e) {
+      setStatus('warn', 'Could not open .cmap: ' + (e.message || e));
+    }
+  }
+
+  async function loadSampleDemoCmap() {
+    const z = 14, center = latLonToTile(27.1751, 78.0421, z), tx = center.tx, ty = center.ty;
+    const nw = tileToLatLon(tx, ty, z), se = tileToLatLon(tx + 1, ty + 1, z);
+    const feats = [
+      { kind: KIND_WATER_POLY, gtype: GTYPE_POLY, label: '', rings: [[[0, 220], [1600, 120], [3200, 380], [4096, 860], [4096, 1360], [2900, 920], [1500, 620], [0, 740]]] },
+      { kind: KIND_PARK_POLY, gtype: GTYPE_POLY, label: 'Mehtab Bagh', rings: [[[1300, 880], [2600, 920], [2560, 1680], [1260, 1640]]] },
+      { kind: KIND_PARK_POLY, gtype: GTYPE_POLY, label: 'Taj Nature Walk', rings: [[[1500, 2000], [3300, 2000], [3300, 3200], [1500, 3200]]] },
+      { kind: KIND_HIGHWAY, gtype: GTYPE_LINE, label: '', rings: [[[0, 3650], [1800, 3540], [4096, 3720]]] },
+      { kind: KIND_MAJOR_ROAD, gtype: GTYPE_LINE, label: '', rings: [[[820, 1900], [820, 3900]], [[2980, 1750], [3120, 4050]]] },
+      { kind: KIND_MINOR_ROAD, gtype: GTYPE_LINE, label: '', rings: [[[820, 2400], [2980, 2420]], [[820, 2900], [3040, 2940]], [[1100, 3250], [2900, 3280]]] },
+      { kind: KIND_PATH, gtype: GTYPE_LINE, label: '', rings: [[[1640, 2140], [3120, 2140], [3140, 3040], [1620, 3040], [1640, 2140]], [[1400, 1180], [2420, 1220], [2400, 1550], [1420, 1520], [1400, 1180]]] },
+      { kind: KIND_PLACE_LBL, gtype: GTYPE_POINT, label: 'Taj Nature Loop (Sample)', rings: [[[2380, 2580]]] },
+      { kind: KIND_ROAD_LBL, gtype: GTYPE_POINT, label: 'Taj East Gate Rd', rings: [[[3060, 2680]]] }
+    ];
+    const packed = await encodeCmap({
+      zoom: z, minX: tx, minY: ty, cols: 1, rows: 1,
+      minLat: se.lat, minLon: nw.lon, maxLat: nw.lat, maxLon: se.lon,
+      areaName: 'Agra Sample Loop'
+    }, [{ tx, ty, tz: z, features: feats }]);
+    const parsed = await decodeCmap(packed.gzBytes);
+    enterInspectMode(parsed, 'sample-agra-loop.cmap');
+    setStatus('ok', `Sample CMAP encoded (${packed.gzBytes.length} B) and decoded offline!`);
+  }
+
+  // ---- Interactive Canvas Touch / Mouse / Crop / Polygon Handler ----
+  function hitTestCropOrPoly(x, y) {
+    const rect = canvas.getBoundingClientRect();
+    const z = state.zoom;
+    const cWX = lonToWorldX(state.lon, z), cWY = latToWorldY(state.lat, z);
+    const tlWX = cWX - rect.width / 2, tlWY = cWY - rect.height / 2;
+    const hitR = 22;
+
+    if (state.cutMode === 'poly') {
+      for (let i = 0; i < state.polyPts.length; i++) {
+        const px = lonToWorldX(state.polyPts[i][1], z) - tlWX;
+        const py = latToWorldY(state.polyPts[i][0], z) - tlWY;
+        if (Math.hypot(x - px, y - py) <= hitR) return { type: 'polyPt', idx: i };
+      }
+      return null;
+    }
+    if (state.cutMode === 'rect') {
+      const r = state.cropRect;
+      const bx1 = lonToWorldX(r.minLon, z) - tlWX, bx2 = lonToWorldX(r.maxLon, z) - tlWX;
+      const by1 = latToWorldY(r.maxLat, z) - tlWY, by2 = latToWorldY(r.minLat, z) - tlWY;
+      const corners = [
+        ['nw', bx1, by1], ['ne', bx2, by1], ['sw', bx1, by2], ['se', bx2, by2],
+        ['n', (bx1 + bx2) / 2, by1], ['s', (bx1 + bx2) / 2, by2],
+        ['w', bx1, (by1 + by2) / 2], ['e', bx2, (by1 + by2) / 2]
+      ];
+      for (const [t, cx, cy] of corners) {
+        if (Math.hypot(x - cx, y - cy) <= hitR) return { type: t };
+      }
+      if (x > bx1 && x < bx2 && y > by1 && y < by2) return { type: 'box' };
+    }
+    return null;
+  }
+
+  function moveHandle(handle, x, y, dx, dy) {
+    const rect = canvas.getBoundingClientRect();
+    const z = state.zoom;
+    const cWX = lonToWorldX(state.lon, z), cWY = latToWorldY(state.lat, z);
+    const tlWX = cWX - rect.width / 2, tlWY = cWY - rect.height / 2;
+    const lat = worldYToLat(tlWY + y, z);
+    const lon = worldXToLon(tlWX + x, z);
+
+    if (handle.type === 'polyPt') {
+      state.polyPts[handle.idx] = [lat, lon];
+      updateCutMetrics();
+      return;
+    }
+    const r = state.cropRect;
+    const minSpan = 0.0015;
+    if (handle.type === 'box') {
+      const wx1 = lonToWorldX(r.minLon, z) + dx, wx2 = lonToWorldX(r.maxLon, z) + dx;
+      const wy1 = latToWorldY(r.maxLat, z) + dy, wy2 = latToWorldY(r.minLat, z) + dy;
+      r.minLon = worldXToLon(wx1, z); r.maxLon = worldXToLon(wx2, z);
+      r.maxLat = worldYToLat(wy1, z); r.minLat = worldYToLat(wy2, z);
+    } else {
+      if (handle.type.includes('w')) r.minLon = Math.min(r.maxLon - minSpan, lon);
+      if (handle.type.includes('e')) r.maxLon = Math.max(r.minLon + minSpan, lon);
+      if (handle.type.includes('n')) r.maxLat = Math.max(r.minLat + minSpan, lat);
+      if (handle.type.includes('s')) r.minLat = Math.min(r.maxLat - minSpan, lat);
+    }
+    updateCutMetrics();
+  }
+
+  if (canvas) {
+    canvas.addEventListener('pointerdown', e => {
+      canvas.setPointerCapture(e.pointerId);
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left, y = e.clientY - rect.top;
+      state.ptrs.set(e.pointerId, { x, y });
+      state.dragMoved = false;
+
+      if (state.ptrs.size === 1) {
+        state.downX = x; state.downY = y;
+        state.activeHandle = state.inspectCmap ? null : hitTestCropOrPoly(x, y);
+      } else if (state.ptrs.size === 2) {
+        state.activeHandle = null;
+        const pts = Array.from(state.ptrs.values());
+        state.lastPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        state.lastMidX = (pts[0].x + pts[1].x) * 0.5;
+        state.lastMidY = (pts[0].y + pts[1].y) * 0.5;
+      }
+    });
+
+    canvas.addEventListener('pointermove', e => {
+      if (!state.ptrs.has(e.pointerId)) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left, y = e.clientY - rect.top;
+      const prev = state.ptrs.get(e.pointerId);
+      const dx = x - prev.x, dy = y - prev.y;
+      state.ptrs.set(e.pointerId, { x, y });
+
+      if (state.ptrs.size === 2) {
+        const pts = Array.from(state.ptrs.values());
+        const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        const midX = (pts[0].x + pts[1].x) * 0.5, midY = (pts[0].y + pts[1].y) * 0.5;
+        if (state.lastPinchDist > 10 && dist > 10) {
+          const dz = Math.log2(dist / state.lastPinchDist);
+          state.zoom = Math.max(9.5, Math.min(16.5, state.zoom + dz));
+        }
+        const mdx = midX - state.lastMidX, mdy = midY - state.lastMidY;
+        const wx = lonToWorldX(state.lon, state.zoom) - mdx;
+        const wy = latToWorldY(state.lat, state.zoom) - mdy;
+        state.lon = worldXToLon(wx, state.zoom);
+        state.lat = worldYToLat(wy, state.zoom);
+        state.lastPinchDist = dist; state.lastMidX = midX; state.lastMidY = midY;
+        state.dragMoved = true;
+        state.needRender = true;
+        return;
+      }
+
+      if (Math.hypot(x - state.downX, y - state.downY) > 6) state.dragMoved = true;
+      if (state.activeHandle) {
+        moveHandle(state.activeHandle, x, y, dx, dy);
+      } else if (state.ptrs.size === 1) {
+        const wx = lonToWorldX(state.lon, state.zoom) - dx;
+        const wy = latToWorldY(state.lat, state.zoom) - dy;
+        state.lon = worldXToLon(wx, state.zoom);
+        state.lat = worldYToLat(wy, state.zoom);
+        state.needRender = true;
+      }
+    });
+
+    const onPtrEnd = e => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left, y = e.clientY - rect.top;
+      const wasSingleTap = state.ptrs.size === 1 && !state.dragMoved && !state.activeHandle;
+      state.ptrs.delete(e.pointerId);
+      state.activeHandle = null;
+      if (state.ptrs.size === 1) {
+        const rem = Array.from(state.ptrs.values())[0];
+        state.downX = rem.x; state.downY = rem.y;
+      }
+      if (wasSingleTap && !state.inspectCmap && state.cutMode === 'poly') {
+        const cWX = lonToWorldX(state.lon, state.zoom), cWY = latToWorldY(state.lat, state.zoom);
+        const tlWX = cWX - rect.width / 2, tlWY = cWY - rect.height / 2;
+        state.polyPts.push([worldYToLat(tlWY + y, state.zoom), worldXToLon(tlWX + x, state.zoom)]);
+        updateCutMetrics();
+      }
+    };
+    canvas.addEventListener('pointerup', onPtrEnd);
+    canvas.addEventListener('pointercancel', onPtrEnd);
+
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      state.zoom = Math.max(9.5, Math.min(16.5, state.zoom + (e.deltaY < 0 ? 0.35 : -0.35)));
+      state.needRender = true;
+    }, { passive: false });
+  }
+
+  // ---- Wire Controls ----
+  if (typeof document !== 'undefined' && $('searchBtn')) {
+    $('searchBtn').addEventListener('click', handleSearch);
+    $('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') handleSearch(); });
+    $('gpsBtn').addEventListener('click', () => {
+      if (!navigator.geolocation) { setStatus('warn', 'Geolocation unavailable.'); return; }
+      navigator.geolocation.getCurrentPosition(pos => {
+        $('packNameInput').value = 'My Area';
+        jumpTo(pos.coords.latitude, pos.coords.longitude, 'My Area', 14.0);
+        setStatus('ok', 'Centered on your GPS location.');
+      }, () => setStatus('warn', 'GPS permission denied or unavailable.'));
+    });
+
+    $('cityChips').addEventListener('click', e => {
+      const btn = e.target.closest('.chip');
+      if (!btn) return;
+      exitInspectMode();
+      $('packNameInput').value = btn.dataset.name;
+      jumpTo(parseFloat(btn.dataset.lat), parseFloat(btn.dataset.lon), btn.dataset.name, 13.8);
+    });
+
+    $('cutModeSeg').addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      exitInspectMode();
+      setCutMode(btn.dataset.mode);
+    });
+
+    $('radiusChips').addEventListener('click', e => {
+      const btn = e.target.closest('.chip');
+      if (!btn) return;
+      $('radiusChips').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      state.cutRadKm = parseFloat(btn.dataset.rad);
+      updateCutMetrics();
+    });
+
+    $('fitRectViewBtn').addEventListener('click', resetRectToView);
+    $('centerRectBtn').addEventListener('click', () => {
+      const r = state.cropRect;
+      const dLat = (r.maxLat - r.minLat) * 0.5, dLon = (r.maxLon - r.minLon) * 0.5;
+      state.cropRect = { minLat: state.lat - dLat, maxLat: state.lat + dLat, minLon: state.lon - dLon, maxLon: state.lon + dLon };
+      updateCutMetrics();
+    });
+
+    const undoPoly = () => { if (state.polyPts.length > 0) { state.polyPts.pop(); updateCutMetrics(); } };
+    const clearPoly = () => { state.polyPts = []; updateCutMetrics(); };
+    $('polyUndoBtn').addEventListener('click', undoPoly);
+    $('hudPolyUndoBtn').addEventListener('click', undoPoly);
+    $('polyClearBtn').addEventListener('click', clearPoly);
+    $('hudPolyClearBtn').addEventListener('click', clearPoly);
+    $('polyPresetBtn').addEventListener('click', makeStarterPolygon);
+
+    $('cutZoom').addEventListener('change', e => { state.cutZoom = parseInt(e.target.value, 10); updateCutMetrics(); });
+    $('recenterCutBtn').addEventListener('click', () => {
+      exitInspectMode();
+      state.cutLat = state.lat; state.cutLon = state.lon;
+      if (state.cutMode === 'rect') resetRectToView();
+      else updateCutMetrics();
+      setStatus('ok', `Cut centered at ${state.lat.toFixed(4)}, ${state.lon.toFixed(4)}.`);
+    });
+    $('centerCutBtn').addEventListener('click', () => {
+      const g = computeCutGrid();
+      state.lat = (g.minLat + g.maxLat) * 0.5;
+      state.lon = (g.minLon + g.maxLon) * 0.5;
+      state.needRender = true;
+    });
+
+    ['optRoads', 'optPaths', 'optParks', 'optWater', 'optLabels', 'optBuildings', 'simplifySel'].forEach(id => {
+      $(id).addEventListener('change', () => { updateCutMetrics(); state.tileCache.clear(); state.needRender = true; });
+    });
+
+    $('zoomInBtn').addEventListener('click', () => { state.zoom = Math.min(16.5, state.zoom + 0.7); state.needRender = true; });
+    $('zoomOutBtn').addEventListener('click', () => { state.zoom = Math.max(9.5, state.zoom - 0.7); state.needRender = true; });
+    $('cutBtn').addEventListener('click', runCutAndDownload);
+    $('exitInspectBtn').addEventListener('click', exitInspectMode);
+    $('demoCmapBtn').addEventListener('click', loadSampleDemoCmap);
+
+    // Mobile layout maximize toggles
+    $('toggleMapSizeBtn').addEventListener('click', () => {
+      const root = $('appRoot');
+      root.classList.remove('panel-max');
+      const maxed = root.classList.toggle('map-max');
+      $('toggleMapSizeBtn').textContent = maxed ? 'Map ⤡' : 'Map ⤢';
+      $('togglePanelBtn').textContent = 'Panel ⤢';
+      setTimeout(resizeCanvas, 50);
+    });
+    $('togglePanelBtn').addEventListener('click', () => {
+      const root = $('appRoot');
+      root.classList.remove('map-max');
+      const maxed = root.classList.toggle('panel-max');
+      $('togglePanelBtn').textContent = maxed ? 'Panel ⤡' : 'Panel ⤢';
+      $('toggleMapSizeBtn').textContent = 'Map ⤢';
+      setTimeout(resizeCanvas, 50);
+    });
+
+    const dz = $('dropZone');
+    dz.addEventListener('click', () => $('fileInput').click());
+    $('fileInput').addEventListener('change', e => { if (e.target.files && e.target.files[0]) inspectUploadedFile(e.target.files[0]); });
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); if (e.dataTransfer.files && e.dataTransfer.files[0]) inspectUploadedFile(e.dataTransfer.files[0]); });
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    $('packNameInput').value = 'Agra';
+    updateCutMetrics();
+    requestAnimationFrame(renderFrame);
+  }
+})();
+</script>
+</body>
+</html>
