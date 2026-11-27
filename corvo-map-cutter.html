@@ -73,6 +73,24 @@
     background: var(--accentDim); color: var(--accent);
     border: 1px solid rgba(0,229,160,0.3);
   }
+  .badge-online {
+    background: rgba(56, 189, 248, 0.14); color: var(--blue);
+    border-color: rgba(56, 189, 248, 0.35);
+  }
+  .retry-btn {
+    padding: 2px 8px; font-size: 10px; min-height: 22px; border-radius: 999px;
+    border: 1px solid rgba(255, 180, 84, 0.45);
+    background: rgba(255, 180, 84, 0.12); color: var(--amber);
+    display: none;
+  }
+  .retry-btn:hover { background: rgba(255, 180, 84, 0.24); border-color: var(--amber); }
+  .offline-hud {
+    display: none; align-items: center; gap: 8px;
+    background: rgba(11, 16, 23, 0.92); border: 1px solid rgba(255, 180, 84, 0.45);
+    color: var(--amber); padding: 5px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; pointer-events: auto;
+    backdrop-filter: blur(8px);
+  }
   .card {
     background: var(--card); border: 1px solid var(--border);
     border-radius: 12px; padding: 11px 12px;
@@ -223,19 +241,22 @@
         <span class="dot"></span>
         <div>
           <h1>Corvo Map Cutter</h1>
-          <div style="font-size:10.5px;color:var(--muted)">Phone + PC Universal · CMAP2</div>
+          <div style="font-size:10.5px;color:var(--muted)">Online Vector Tiles → Offline .cmap</div>
         </div>
       </div>
       <div class="row">
         <button class="btn-ghost mob-only" id="togglePanelBtn" style="padding:3px 9px;font-size:10.5px">Panel ⤢</button>
-        <span class="badge">OFFLINE</span>
+        <span class="badge badge-online" title="Cuts live vector tiles online; saved .cmap works 100% offline in Corvo">ONLINE → .CMAP</span>
       </div>
     </div>
 
     <div class="card">
       <div class="label">
         <span>1. Search City or Paste Coords</span>
-        <span id="netStatus" style="color:var(--muted)">Ready</span>
+        <span class="row" style="gap:5px">
+          <span id="netStatus" style="color:var(--muted)">Connecting...</span>
+          <button class="retry-btn" id="retryNetBtn" type="button">Retry</button>
+        </span>
       </div>
       <div class="row">
         <input type="text" id="searchInput" placeholder="Agra, Taj Ganj or 27.175, 78.042">
@@ -249,6 +270,14 @@
         <button class="chip" data-lat="19.0760" data-lon="72.8777" data-name="Mumbai">Mumbai</button>
         <button class="chip" data-lat="51.5074" data-lon="-0.1278" data-name="London">London</button>
         <button class="chip" data-lat="40.7731" data-lon="-73.9712" data-name="Central Park NY">NYC Park</button>
+      </div>
+      <div class="row" style="gap:6px">
+        <span style="font-size:10.5px;color:var(--muted);white-space:nowrap">Map Source</span>
+        <select id="providerSel" style="min-height:30px;padding:4px 8px;font-size:11px" title="Auto switches to VersaTiles if OpenFreeMap is blocked by Brave / uBlock / AdGuard / DNS blockers">
+          <option value="auto" selected>Auto (OpenFreeMap → VersaTiles)</option>
+          <option value="versatiles">VersaTiles (AdBlock-Safe)</option>
+          <option value="openfreemap">OpenFreeMap Only</option>
+        </select>
       </div>
     </div>
 
@@ -331,16 +360,16 @@
     <button class="btn-primary" id="cutBtn">Cut &amp; Download .cmap</button>
     <div class="prog-wrap" id="progWrap"><div class="prog-bar" id="progBar"></div></div>
     <div class="msg" id="statusBox">
-      Use <b>Square</b> for quick cuts, <b>Photo Crop</b> to crop like an image, or <b>Polygon</b> to trace custom routes!
+      Uses internet (<b>OpenFreeMap</b> or <b>VersaTiles</b>) to load &amp; cut maps. Exported <b>.cmap</b> packs run 100% offline inside Corvo.
     </div>
 
     <div class="card">
       <div class="label">
-        <span>4. Offline .cmap Inspector</span>
+        <span>4. Saved .cmap Inspector (Offline)</span>
         <button class="btn-ghost" id="demoCmapBtn" style="padding:2px 6px;font-size:10px">Load Demo .cmap</button>
       </div>
       <div class="dropzone" id="dropZone">
-        Drop or tap to open any <b>.cmap</b> file offline
+        Drop or tap to inspect any saved <b>.cmap</b> file offline
         <input type="file" id="fileInput" accept=".cmap,.gz,*/*" style="display:none">
       </div>
       <div id="inspectInfo" style="display:none;font-size:11px;color:var(--muted);line-height:1.45"></div>
@@ -360,8 +389,12 @@
         <button id="hudPolyUndoBtn" style="display:none;color:var(--amber)">Undo Pt</button>
         <button id="hudPolyClearBtn" style="display:none;color:var(--red)">Clear</button>
       </div>
+      <div class="offline-hud" id="offlineHud">
+        <span id="offlineHudText">No network</span>
+        <button id="hudRetryBtn" type="button" style="padding:2px 8px;font-size:10.5px;min-height:22px;border-color:rgba(255,180,84,0.5);color:var(--amber)">Retry</button>
+      </div>
       <div class="mode-banner" id="modeBanner">
-        <span id="modeLabel">PREVIEWING .CMAP OFFLINE</span>
+        <span id="modeLabel">SAVED .CMAP (OFFLINE)</span>
         <button id="exitInspectBtn" style="padding:2px 8px;font-size:10.5px;min-height:24px;border-color:rgba(0,229,160,0.45)">Live Map</button>
       </div>
     </div>
@@ -423,9 +456,17 @@
     polyPts: [],
     tileTemplate: null,
     tileTemplatePromise: null,
+    providerMode: 'auto', // 'auto' | 'versatiles' | 'openfreemap'
+    activeProvider: null, // 'openfreemap' | 'versatiles'
+    tileSchema: 'openmaptiles', // 'openmaptiles' | 'shortbread'
+    lastNetError: '',
     tileCache: new Map(),
     inspectCmap: null,
     offlineHintShown: false,
+    netOffline: false,
+    consecutiveTileErrors: 0,
+    retryingNet: false,
+    lastRetryAt: 0,
     // Multi-touch + drag state
     ptrs: new Map(),
     activeHandle: null, // { type: 'nw'|'ne'|'sw'|'se'|'n'|'s'|'e'|'w'|'box'|'polyPt', idx? }
@@ -884,11 +925,143 @@
   }
 
   function pickLabel(props) {
-    const s = props['name:en'] || props['name_int'] || props['name:latin'] || props['name'] || '';
+    const s = props['name:en'] || props['name_en'] || props['name_int'] || props['name:latin'] || props['name_latin'] || props['name'] || '';
     return String(s).trim().slice(0, 44);
   }
 
-  function extractCorvoFeatures(rawBuf, opts) {
+  const SB_PARK_LAND = new Set([
+    'forest', 'wood', 'grass', 'park', 'cemetery', 'pitch', 'stadium',
+    'recreation_ground', 'golf_course', 'garden', 'meadow', 'village_green', 'allotments'
+  ]);
+  const SB_PARK_SITE = new Set([
+    'park', 'recreation_ground', 'sports_center', 'sports_centre', 'cemetery',
+    'stadium', 'pitch', 'playground', 'garden', 'golf_course', 'nature_reserve'
+  ]);
+  const SB_PATH_KINDS = new Set([
+    'path', 'track', 'footway', 'cycleway', 'steps', 'pedestrian', 'bridleway'
+  ]);
+  const SB_RAIL_KINDS = new Set([
+    'rail', 'light_rail', 'subway', 'tram', 'narrow_gauge', 'monorail'
+  ]);
+
+  function extractShortbreadFeatures(layers, rawBuf, opts, pushFeat, seenRoadNames) {
+    const eps = opts.simplify;
+    const seenPlaces = new Set();
+
+    if (opts.water && layers.water_polygons) {
+      const L = layers.water_polygons;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        if (f.ftype !== 3) continue;
+        pushFeat(KIND_WATER_POLY, GTYPE_POLY, '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 3));
+      }
+    }
+    if (opts.parks) {
+      if (layers.land) {
+        const L = layers.land;
+        for (const [s, e] of L.rawFeatures) {
+          const f = decodeMvtFeature(rawBuf, s, e, L);
+          if (f.ftype !== 3 || !SB_PARK_LAND.has(f.props.kind || '')) continue;
+          pushFeat(KIND_PARK_POLY, GTYPE_POLY, '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 3));
+        }
+      }
+      if (layers.sites) {
+        const L = layers.sites;
+        for (const [s, e] of L.rawFeatures) {
+          const f = decodeMvtFeature(rawBuf, s, e, L);
+          if (f.ftype !== 3 || !SB_PARK_SITE.has(f.props.kind || '')) continue;
+          pushFeat(KIND_PARK_POLY, GTYPE_POLY, opts.labels ? pickLabel(f.props) : '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 3));
+        }
+      }
+    }
+    if (opts.buildings && layers.buildings) {
+      const L = layers.buildings;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        if (f.ftype !== 3) continue;
+        pushFeat(KIND_BUILDING, GTYPE_POLY, '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 3));
+      }
+    }
+    if (opts.water && layers.water_lines) {
+      const L = layers.water_lines;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        if (f.ftype !== 2) continue;
+        pushFeat(KIND_WATERWAY, GTYPE_LINE, opts.labels ? pickLabel(f.props) : '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 2));
+      }
+    }
+    if (opts.water && opts.labels && layers.water_lines_labels) {
+      const L = layers.water_lines_labels;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        const lbl = pickLabel(f.props);
+        if (!lbl || seenRoadNames.has(lbl) || !f.rings[0] || !f.rings[0].length) continue;
+        const pts = f.rings[0], mid = pts[Math.floor(pts.length / 2)];
+        if (mid[0] < 120 || mid[0] > 3976 || mid[1] < 120 || mid[1] > 3976) continue;
+        seenRoadNames.add(lbl);
+        pushFeat(KIND_ROAD_LBL, GTYPE_POINT, lbl, [[mid]]);
+      }
+    }
+    if ((opts.roads || opts.paths) && layers.streets) {
+      const L = layers.streets;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        if (f.ftype !== 2) continue;
+        const k = String(f.props.kind || '');
+        if (f.props.tunnel && SB_RAIL_KINDS.has(k)) continue;
+        let kind = null;
+        if (SB_PATH_KINDS.has(k)) {
+          if (!opts.paths) continue; kind = KIND_PATH;
+        } else if (k === 'motorway' || k === 'trunk') {
+          if (!opts.roads) continue; kind = KIND_HIGHWAY;
+        } else if (k === 'primary' || k === 'secondary') {
+          if (!opts.roads) continue; kind = KIND_MAJOR_ROAD;
+        } else if (f.props.rail === true || SB_RAIL_KINDS.has(k)) {
+          if (!opts.roads) continue; kind = KIND_RAIL;
+        } else {
+          if (!opts.roads) continue; kind = KIND_MINOR_ROAD;
+        }
+        pushFeat(kind, GTYPE_LINE, '', f.rings.map(r => rdp(r, eps)).filter(r => r.length >= 2));
+      }
+    }
+    if (opts.labels && layers.street_labels) {
+      const L = layers.street_labels;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        const lbl = pickLabel(f.props);
+        if (!lbl || seenRoadNames.has(lbl) || !f.rings[0] || !f.rings[0].length) continue;
+        const pts = f.rings[0], mid = pts[Math.floor(pts.length / 2)];
+        if (mid[0] < 120 || mid[0] > 3976 || mid[1] < 120 || mid[1] > 3976) continue;
+        seenRoadNames.add(lbl);
+        pushFeat(KIND_ROAD_LBL, GTYPE_POINT, lbl, [[mid]]);
+      }
+    }
+    if (opts.labels && layers.place_labels) {
+      const L = layers.place_labels;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        const lbl = pickLabel(f.props);
+        if (!lbl || seenPlaces.has(lbl) || !f.rings[0] || !f.rings[0][0]) continue;
+        seenPlaces.add(lbl);
+        pushFeat(KIND_PLACE_LBL, GTYPE_POINT, lbl, [[f.rings[0][0]]]);
+      }
+    }
+    if (opts.parks && opts.labels && layers.pois) {
+      const L = layers.pois;
+      for (const [s, e] of L.rawFeatures) {
+        const f = decodeMvtFeature(rawBuf, s, e, L);
+        if (f.ftype !== 1 || !f.rings[0] || !f.rings[0][0]) continue;
+        const p = f.props;
+        if (p.leisure !== 'park' && p.leisure !== 'garden' && p.leisure !== 'nature_reserve' && p.historic !== 'archaeological_site') continue;
+        const lbl = pickLabel(p);
+        if (!lbl || seenPlaces.has(lbl)) continue;
+        seenPlaces.add(lbl);
+        pushFeat(KIND_PLACE_LBL, GTYPE_POINT, lbl, [[f.rings[0][0]]]);
+      }
+    }
+  }
+
+  function extractCorvoFeatures(rawBuf, opts, schemaHint) {
     const layers = decodeMvtTile(rawBuf);
     const out = [];
     const seenRoadNames = new Set();
@@ -898,6 +1071,13 @@
       if (!rings || rings.length === 0) return;
       out.push({ kind, gtype, label: label || '', rings });
     };
+
+    const isShortbread = schemaHint === 'shortbread'
+      || (!layers.transportation && !layers.water && (layers.streets || layers.water_polygons || layers.land));
+    if (isShortbread) {
+      extractShortbreadFeatures(layers, rawBuf, opts, pushFeat, seenRoadNames);
+      return out;
+    }
 
     if (opts.water && layers.water) {
       const L = layers.water;
@@ -1150,33 +1330,214 @@
     };
   }
 
-  // ---- OpenFreeMap Tile Fetcher ----
-  async function getTileTemplate() {
-    if (state.tileTemplate) return state.tileTemplate;
-    if (state.tileTemplatePromise) return state.tileTemplatePromise;
-    state.tileTemplatePromise = (async () => {
-      try {
-        const res = await fetch('https://tiles.openfreemap.org/planet', { mode: 'cors' });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const tj = await res.json();
-        if (!tj.tiles || !tj.tiles[0]) throw new Error('No tiles URL');
-        state.tileTemplate = tj.tiles[0];
-        $('netStatus').textContent = 'OpenFreeMap Live';
-        $('netStatus').style.color = 'var(--accent)';
-        return state.tileTemplate;
-      } catch (err) {
-        state.tileTemplatePromise = null;
-        $('netStatus').textContent = 'Offline / Blocked';
-        $('netStatus').style.color = 'var(--amber)';
-        if (!state.offlineHintShown) {
-          state.offlineHintShown = true;
-          setStatus('warn',
-            'Network unavailable in this preview iframe. Download this HTML and open in Chrome/Safari for live OpenFreeMap tiles — or click "Load Demo .cmap" below!');
-        }
-        throw err;
+  // ---- Dual-Provider Vector Tile Fetcher (OpenFreeMap + VersaTiles Auto-Fallback) ----
+  function isSandboxedFrame() {
+    try { return window.self !== window.top; } catch (e) { return true; }
+  }
+
+  function resolveTemplateUrl(rawTpl, originBase) {
+    if (!rawTpl) return originBase;
+    if (/^https?:\/\//i.test(rawTpl)) return rawTpl;
+    if (rawTpl.startsWith('/')) return originBase.replace(/\/+$/, '') + rawTpl;
+    return originBase.replace(/\/+$/, '') + '/' + rawTpl.replace(/^\/+/, '');
+  }
+
+  async function fetchWithTimeout(url, opts = {}, ms = 9000) {
+    if (typeof AbortController === 'undefined') return fetch(url, opts);
+    const ac = new AbortController();
+    const tid = setTimeout(() => ac.abort(), ms);
+    try {
+      return await fetch(url, { ...opts, signal: ac.signal });
+    } finally {
+      clearTimeout(tid);
+    }
+  }
+
+  function hasErrorTiles() {
+    for (const v of state.tileCache.values()) {
+      if (v && v.status === 'err') return true;
+    }
+    return false;
+  }
+
+  function purgeErrorTiles() {
+    let purged = 0;
+    for (const [k, v] of state.tileCache.entries()) {
+      if (v && v.status === 'err') {
+        state.tileCache.delete(k);
+        purged++;
       }
+    }
+    return purged;
+  }
+
+  function providerLabel(id) {
+    return id === 'versatiles' ? 'VersaTiles Live' : 'OpenFreeMap Live';
+  }
+
+  function updateNetUI(isOnline, customLabel) {
+    const ns = $('netStatus');
+    const rb = $('retryNetBtn');
+    const hud = $('offlineHud');
+    const hudTxt = $('offlineHudText');
+    if (isOnline) {
+      if (ns) {
+        ns.textContent = customLabel || providerLabel(state.activeProvider);
+        ns.style.color = 'var(--accent)';
+      }
+      if (rb) rb.style.display = 'none';
+      if (hud) hud.style.display = 'none';
+    } else {
+      const lbl = customLabel || (isSandboxedFrame() ? 'Iframe Blocked' : 'No Network');
+      if (ns) {
+        ns.textContent = lbl;
+        ns.style.color = 'var(--amber)';
+      }
+      if (rb) rb.style.display = 'inline-flex';
+      if (hudTxt) hudTxt.textContent = lbl;
+      if (hud) hud.style.display = state.inspectCmap ? 'none' : 'flex';
+    }
+  }
+
+  function showOfflineHint(forceUpdate) {
+    if (state.offlineHintShown && !forceUpdate) return;
+    state.offlineHintShown = true;
+    const detail = state.lastNetError ? ` (${state.lastNetError})` : '';
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setStatus('warn',
+        'No internet connection. Turn on Wi-Fi or mobile data and tap Retry (auto-restores when back online). Saved .cmap packs still work offline below.');
+    } else if (isSandboxedFrame()) {
+      setStatus('warn',
+        'Network blocked inside this preview iframe. Download this HTML and open directly in Chrome/Safari/Firefox to load map tiles.');
+    } else {
+      setStatus('warn',
+        `Could not reach map tile servers${detail}. Check internet/VPN/AdBlocker or switch Map Source above to VersaTiles, then tap Retry.`);
+    }
+  }
+
+  async function probeProvider(id) {
+    if (id === 'openfreemap') {
+      const res = await fetchWithTimeout('https://tiles.openfreemap.org/planet', {
+        mode: 'cors',
+        cache: 'no-store'
+      }, 4000);
+      if (!res.ok) throw new Error('OFM HTTP ' + res.status);
+      const tj = await res.json();
+      if (!tj.tiles || !tj.tiles[0]) throw new Error('OFM missing tiles URL');
+      return {
+        id: 'openfreemap',
+        schema: 'openmaptiles',
+        template: resolveTemplateUrl(tj.tiles[0], 'https://tiles.openfreemap.org')
+      };
+    }
+    const res = await fetchWithTimeout('https://tiles.versatiles.org/tiles/osm/tiles.json', {
+      mode: 'cors',
+      cache: 'no-store'
+    }, 6500);
+    if (!res.ok) throw new Error('VersaTiles HTTP ' + res.status);
+    const tj = await res.json();
+    const rawTpl = (tj.tiles && tj.tiles[0]) ? tj.tiles[0] : '/tiles/osm-vector/{z}/{x}/{y}';
+    return {
+      id: 'versatiles',
+      schema: 'shortbread',
+      template: resolveTemplateUrl(rawTpl, 'https://tiles.versatiles.org')
+    };
+  }
+
+  async function getTileTemplate(forceFresh = false, preferredProvider = null) {
+    if (state.tileTemplate && !forceFresh && (!preferredProvider || state.activeProvider === preferredProvider)) {
+      return state.tileTemplate;
+    }
+    if (state.tileTemplatePromise && !forceFresh && !preferredProvider) return state.tileTemplatePromise;
+    if (forceFresh || preferredProvider) {
+      state.tileTemplate = null;
+      state.tileTemplatePromise = null;
+    }
+
+    state.tileTemplatePromise = (async () => {
+      const candidates = preferredProvider
+        ? [preferredProvider]
+        : (state.providerMode === 'versatiles'
+            ? ['versatiles']
+            : (state.providerMode === 'openfreemap'
+                ? ['openfreemap']
+                : ['openfreemap', 'versatiles']));
+
+      const errs = [];
+      let picked = null;
+      for (const cand of candidates) {
+        try {
+          picked = await probeProvider(cand);
+          break;
+        } catch (err) {
+          const msg = (err && err.name === 'AbortError') ? 'timeout' : (err && err.message ? err.message : String(err));
+          errs.push(`${cand}: ${msg}`);
+        }
+      }
+
+      if (!picked) {
+        state.tileTemplatePromise = null;
+        state.lastNetError = errs.join(' · ');
+        state.netOffline = true;
+        updateNetUI(false, isSandboxedFrame() ? 'Iframe Blocked' : (typeof navigator !== 'undefined' && navigator.onLine === false ? 'No Network' : 'Tiles Blocked/Offline'));
+        showOfflineHint(false);
+        state.needRender = true;
+        throw new Error(state.lastNetError || 'All map providers unreachable');
+      }
+
+      const prevSchema = state.tileSchema;
+      const wasOffline = state.netOffline || state.offlineHintShown;
+      const switchedFallback = candidates.length > 1 && errs.length > 0 && picked.id === 'versatiles';
+
+      if (prevSchema && prevSchema !== picked.schema) {
+        state.tileCache.clear();
+      } else {
+        purgeErrorTiles();
+      }
+
+      state.activeProvider = picked.id;
+      state.tileSchema = picked.schema;
+      state.tileTemplate = picked.template;
+      state.netOffline = false;
+      state.lastNetError = '';
+      state.consecutiveTileErrors = 0;
+      updateNetUI(true, switchedFallback ? 'VersaTiles (Fallback)' : providerLabel(picked.id));
+
+      if (switchedFallback) {
+        state.offlineHintShown = false;
+        setStatus('ok', 'OpenFreeMap was blocked (AdBlock/EasyPrivacy/DNS) — auto-switched to VersaTiles Live!');
+      } else if (wasOffline) {
+        state.offlineHintShown = false;
+        setStatus('ok', `Connected to ${providerLabel(picked.id)} — live map restored.`);
+      }
+      state.needRender = true;
+      return state.tileTemplate;
     })();
     return state.tileTemplatePromise;
+  }
+
+  async function retryLiveMap(manual = false) {
+    const now = Date.now();
+    if (!manual && (state.retryingNet || now - state.lastRetryAt < 2500)) return;
+    if (state.retryingNet) return;
+    state.retryingNet = true;
+    state.lastRetryAt = now;
+    try {
+      const ns = $('netStatus');
+      if (ns && manual) {
+        ns.textContent = 'Reconnecting...';
+        ns.style.color = 'var(--blue)';
+      }
+      purgeErrorTiles();
+      state.netOffline = false;
+      await getTileTemplate(manual || !state.tileTemplate);
+      purgeErrorTiles();
+      state.needRender = true;
+    } catch (err) {
+      if (manual) showOfflineHint(true);
+    } finally {
+      state.retryingNet = false;
+    }
   }
 
   function currentOpts() {
@@ -1191,29 +1552,71 @@
     };
   }
 
-  async function fetchRawTileBytes(z, x, y) {
-    const tpl = await getTileTemplate();
+  async function fetchRawTileBytes(z, x, y, forceReload = false) {
+    const tpl = await getTileTemplate(false);
     const url = tpl.replace('{z}', z).replace('{x}', x).replace('{y}', y);
-    const res = await fetch(url, { mode: 'cors' });
+    const res = await fetchWithTimeout(url, {
+      mode: 'cors',
+      cache: forceReload ? 'reload' : 'default'
+    }, 10000);
     if (res.status === 204 || res.status === 404) return new Uint8Array(0);
     if (!res.ok) throw new Error('Tile HTTP ' + res.status);
     return gunzipIfNeeded(new Uint8Array(await res.arrayBuffer()));
   }
 
   let activeFetches = 0;
-  function requestPreviewTile(z, x, y) {
+  function requestPreviewTile(z, x, y, forceReload = false) {
     const key = `${z}/${x}/${y}`;
-    if (state.tileCache.has(key) || activeFetches > 14) return;
+    if (state.netOffline && !forceReload) return;
+    const existing = state.tileCache.get(key);
+    if (existing && existing.status === 'loading') return;
+    if (existing && existing.status === 'ready' && !forceReload) return;
+    if (existing && existing.status === 'err' && !forceReload) return;
+    if (activeFetches > 14) return;
+    const reqProv = state.activeProvider;
+    const reqSchema = state.tileSchema;
     state.tileCache.set(key, { status: 'loading', features: [] });
     activeFetches++;
-    fetchRawTileBytes(z, x, y)
+    fetchRawTileBytes(z, x, y, forceReload)
       .then(raw => {
-        const feats = raw.length > 0 ? extractCorvoFeatures(raw, currentOpts()) : [];
+        const feats = raw.length > 0 ? extractCorvoFeatures(raw, currentOpts(), reqSchema) : [];
+        const wasOffline = state.netOffline || state.offlineHintShown;
+        state.consecutiveTileErrors = 0;
+        state.netOffline = false;
+        state.lastNetError = '';
         state.tileCache.set(key, { status: 'ready', rawBytes: raw.length, features: feats });
         if (state.tileCache.size > 160) state.tileCache.delete(state.tileCache.keys().next().value);
+        updateNetUI(true);
+        if (wasOffline) {
+          state.offlineHintShown = false;
+          purgeErrorTiles();
+          setStatus('ok', `Connected to ${providerLabel(state.activeProvider)} — live map restored.`);
+        }
         state.needRender = true;
       })
-      .catch(() => { state.tileCache.set(key, { status: 'err', features: [] }); })
+      .catch(err => {
+        if (reqProv && state.activeProvider && state.activeProvider !== reqProv) return;
+        state.consecutiveTileErrors++;
+        state.lastNetError = err && err.message ? err.message : String(err);
+        state.tileCache.set(key, { status: 'err', retryAt: Date.now() + 3500, features: [] });
+        if (state.providerMode === 'auto' && state.activeProvider === 'openfreemap' && state.consecutiveTileErrors >= 3) {
+          state.tileCache.clear();
+          getTileTemplate(true, 'versatiles')
+            .then(() => setStatus('ok', 'OpenFreeMap tiles were blocked — switched automatically to VersaTiles Live!'))
+            .catch(() => {});
+          return;
+        }
+        if (state.consecutiveTileErrors >= 4) {
+          state.netOffline = true;
+          updateNetUI(false, isSandboxedFrame() ? 'Iframe Blocked' : 'Tiles Blocked/Offline');
+          showOfflineHint(false);
+          state.needRender = true;
+        }
+        if (state.consecutiveTileErrors >= 8) {
+          state.tileTemplate = null;
+          state.tileTemplatePromise = null;
+        }
+      })
       .finally(() => { activeFetches--; });
   }
 
@@ -1429,6 +1832,7 @@
     }
 
     const labels = [];
+    let readyTilesInView = 0;
     for (let ty = minTY; ty <= maxTY; ty++) {
       for (let tx = minTX; tx <= maxTX; tx++) {
         const sx = tx * tilePx - topLeftWX;
@@ -1440,14 +1844,20 @@
         const key = `${dispZ}/${tx}/${ty}`;
         if (inspecting) {
           const entry = state.inspectCmap.tiles.get(key);
-          if (entry) drawFeatureTile(entry.features, sx, sy, tilePx, $('optLabels').checked, labels);
+          if (entry) {
+            readyTilesInView++;
+            drawFeatureTile(entry.features, sx, sy, tilePx, $('optLabels').checked, labels);
+          }
         } else {
           let entry = state.tileCache.get(key);
-          if (!entry && z >= 10) {
-            requestPreviewTile(dispZ, tx, ty);
+          const canRetryErr = entry && entry.status === 'err' && !state.netOffline && Date.now() >= (entry.retryAt || 0);
+          if ((!entry || canRetryErr) && z >= 10) {
+            if (canRetryErr) state.tileCache.delete(key);
+            requestPreviewTile(dispZ, tx, ty, canRetryErr);
             entry = state.tileCache.get(key);
           }
           if (entry && entry.status === 'ready') {
+            readyTilesInView++;
             drawFeatureTile(entry.features, sx, sy, tilePx, $('optLabels').checked, labels);
           }
         }
@@ -1541,6 +1951,39 @@
       }
     }
 
+    if (!inspecting && readyTilesInView === 0 && state.netOffline) {
+      const boxW = Math.min(w - 28, 330);
+      const boxH = 74;
+      const rx = (w - boxW) * 0.5;
+      const ry = Math.max(54, h - boxH - 18);
+      ctx.fillStyle = 'rgba(11, 16, 23, 0.92)';
+      ctx.strokeStyle = 'rgba(255, 180, 84, 0.45)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(rx, ry, boxW, boxH, 10);
+      else ctx.rect(rx, ry, boxW, boxH);
+      ctx.fill();
+      ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '700 12px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = '#FFB454';
+      const titleTxt = isSandboxedFrame()
+        ? 'Network blocked inside preview iframe'
+        : (typeof navigator !== 'undefined' && navigator.onLine === false
+            ? 'Device offline — connect internet'
+            : 'Map tiles blocked or unreachable');
+      ctx.fillText(titleTxt, w * 0.5, ry + 20);
+      ctx.font = '500 10.5px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = '#9FB0C7';
+      const errSub = state.lastNetError
+        ? state.lastNetError.slice(0, 48)
+        : 'Switch Map Source to VersaTiles or tap Retry';
+      ctx.fillText(errSub, w * 0.5, ry + 39);
+      ctx.fillStyle = '#00E5A0';
+      ctx.fillText('Tap Retry above · Or load a .cmap file below', w * 0.5, ry + 56);
+    }
+
     $('coordText').textContent = `${state.lat.toFixed(4)}, ${state.lon.toFixed(4)} · z${state.zoom.toFixed(1)}`;
     requestAnimationFrame(renderFrame);
   }
@@ -1624,6 +2067,9 @@
     if (label && !$('packNameInput').value.trim()) $('packNameInput').value = label;
     if (state.cutMode === 'rect') resetRectToView();
     else updateCutMetrics();
+    if (!state.inspectCmap && (state.netOffline || !state.tileTemplate || hasErrorTiles())) {
+      retryLiveMap(false);
+    }
   }
 
   async function handleSearch() {
@@ -1635,6 +2081,7 @@
       if (Math.abs(lat) <= 85 && Math.abs(lon) <= 180) {
         $('packNameInput').value = `Area ${lat.toFixed(2)},${lon.toFixed(2)}`;
         jumpTo(lat, lon, null, Math.max(state.zoom, 13.8));
+        if (state.netOffline || !state.tileTemplate || hasErrorTiles()) retryLiveMap(true);
         setStatus('ok', `Jumped to ${lat.toFixed(4)}, ${lon.toFixed(4)}.`);
         return;
       }
@@ -1642,7 +2089,7 @@
     try {
       setStatus('', `Searching "${q}"...`);
       const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url, { mode: 'cors', cache: 'no-store' }, 8000);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const arr = await res.json();
       if (!arr || !arr.length) { setStatus('warn', `No match for "${q}". Try city name or paste lat, lon.`); return; }
@@ -1650,6 +2097,7 @@
       const shortName = (hit.display_name || q).split(',')[0].trim();
       $('packNameInput').value = shortName;
       jumpTo(lat, lon, shortName, 13.8);
+      if (state.netOffline || !state.tileTemplate || hasErrorTiles()) retryLiveMap(true);
       setStatus('ok', `Centered on ${shortName} (${lat.toFixed(4)}, ${lon.toFixed(4)}).`);
     } catch (e) {
       setStatus('warn', 'Search needs internet — paste "lat, lon" directly or tap a city chip.');
@@ -1674,33 +2122,51 @@
     progBar.style.width = '4%';
 
     try {
-      await getTileTemplate();
+      await getTileTemplate(state.netOffline || !state.tileTemplate);
       const jobs = [];
       for (let ty = g.minY; ty <= g.maxY; ty++) {
         for (let tx = g.minX; tx <= g.maxX; tx++) jobs.push({ tx, ty, tz: g.zoom });
       }
-      let done = 0, totalRawBytes = 0, totalFeatures = 0;
-      const results = new Array(jobs.length);
-      let cursor = 0;
 
-      async function worker() {
-        while (cursor < jobs.length) {
-          const idx = cursor++, j = jobs[idx];
-          const raw = await fetchRawTileBytes(j.tz, j.tx, j.ty);
-          totalRawBytes += raw.length;
-          let features = raw.length > 0 ? extractCorvoFeatures(raw, opts) : [];
-          if (g.exactRect || g.cropPoly) {
-            features = clipFeatureList(features, j.tx, j.ty, j.tz, g.exactRect, g.cropPoly);
+      const fetchAndExtractAll = async () => {
+        const schema = state.tileSchema;
+        let done = 0, rawSum = 0, featSum = 0, cursor = 0;
+        const out = new Array(jobs.length);
+        async function worker() {
+          while (cursor < jobs.length) {
+            const idx = cursor++, j = jobs[idx];
+            const raw = await fetchRawTileBytes(j.tz, j.tx, j.ty);
+            rawSum += raw.length;
+            let features = raw.length > 0 ? extractCorvoFeatures(raw, opts, schema) : [];
+            if (g.exactRect || g.cropPoly) {
+              features = clipFeatureList(features, j.tx, j.ty, j.tz, g.exactRect, g.cropPoly);
+            }
+            featSum += features.length;
+            out[idx] = { tx: j.tx, ty: j.ty, tz: j.tz, features };
+            done++;
+            progBar.style.width = Math.round((done / jobs.length) * 85) + '%';
+            setStatus('', `Cutting tiles (${providerLabel(state.activeProvider)}): ${done}/${jobs.length} (${(rawSum / 1024).toFixed(0)} KB)...`);
           }
-          totalFeatures += features.length;
-          results[idx] = { tx: j.tx, ty: j.ty, tz: j.tz, features };
-          done++;
-          progBar.style.width = Math.round((done / jobs.length) * 85) + '%';
-          setStatus('', `Cutting tiles: ${done}/${jobs.length} (${(totalRawBytes / 1024).toFixed(0)} KB fetched)...`);
+        }
+        await Promise.all([worker(), worker(), worker(), worker()]);
+        return { results: out, totalRawBytes: rawSum, totalFeatures: featSum };
+      };
+
+      let cutPass;
+      try {
+        cutPass = await fetchAndExtractAll();
+      } catch (err) {
+        if (state.providerMode === 'auto' && state.activeProvider === 'openfreemap') {
+          setStatus('', 'OpenFreeMap tiles failed — switching cut to VersaTiles...');
+          state.tileCache.clear();
+          await getTileTemplate(true, 'versatiles');
+          cutPass = await fetchAndExtractAll();
+        } else {
+          throw err;
         }
       }
+      const { results, totalRawBytes, totalFeatures } = cutPass;
 
-      await Promise.all([worker(), worker(), worker(), worker()]);
       progBar.style.width = '94%';
       setStatus('', 'Compressing CMAP binary...');
 
@@ -1735,14 +2201,15 @@
     }
   }
 
-  // ---- Offline Inspector & Sample Generator ----
+  // ---- Saved .cmap Inspector (Offline) & Sample Generator ----
   function enterInspectMode(cmap, filename) {
     state.inspectCmap = cmap;
     state.lat = (cmap.minLat + cmap.maxLat) / 2;
     state.lon = (cmap.minLon + cmap.maxLon) / 2;
     state.zoom = Math.max(12.2, cmap.zoom - 0.35);
-    $('modeLabel').textContent = `OFFLINE: ${cmap.areaName} (${(cmap.gzLen / 1024).toFixed(1)} KB)`;
+    $('modeLabel').textContent = `SAVED .CMAP: ${cmap.areaName} (${(cmap.gzLen / 1024).toFixed(1)} KB)`;
     $('modeBanner').style.display = 'flex';
+    if ($('offlineHud')) $('offlineHud').style.display = 'none';
     $('inspectInfo').style.display = 'block';
     const wKm = haversineKm(state.lat, cmap.minLon, state.lat, cmap.maxLon).toFixed(1);
     const hKm = haversineKm(cmap.minLat, cmap.minLon, cmap.maxLat, cmap.minLon).toFixed(1);
@@ -1756,6 +2223,8 @@
   function exitInspectMode() {
     state.inspectCmap = null;
     $('modeBanner').style.display = 'none';
+    if (state.netOffline && $('offlineHud')) $('offlineHud').style.display = 'flex';
+    if (state.netOffline || !state.tileTemplate || hasErrorTiles()) retryLiveMap(false);
     state.needRender = true;
   }
 
@@ -1951,12 +2420,26 @@
     $('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') handleSearch(); });
     $('gpsBtn').addEventListener('click', () => {
       if (!navigator.geolocation) { setStatus('warn', 'Geolocation unavailable.'); return; }
+      setStatus('', 'Getting GPS location...');
       navigator.geolocation.getCurrentPosition(pos => {
+        exitInspectMode();
         $('packNameInput').value = 'My Area';
         jumpTo(pos.coords.latitude, pos.coords.longitude, 'My Area', 14.0);
-        setStatus('ok', 'Centered on your GPS location.');
-      }, () => setStatus('warn', 'GPS permission denied or unavailable.'));
+        if (state.netOffline || !state.tileTemplate || hasErrorTiles()) retryLiveMap(true);
+        setStatus('ok', `Centered on GPS (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}).`);
+      }, err => setStatus('warn', 'GPS permission denied or unavailable' + (err && err.message ? ' (' + err.message + ')' : '.')));
     });
+
+    if ($('providerSel')) {
+      $('providerSel').addEventListener('change', e => {
+        state.providerMode = e.target.value || 'auto';
+        state.tileCache.clear();
+        state.tileTemplate = null;
+        state.tileTemplatePromise = null;
+        state.offlineHintShown = false;
+        retryLiveMap(true);
+      });
+    }
 
     $('cityChips').addEventListener('click', e => {
       const btn = e.target.closest('.chip');
@@ -2049,12 +2532,41 @@
     dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); if (e.dataTransfer.files && e.dataTransfer.files[0]) inspectUploadedFile(e.dataTransfer.files[0]); });
 
     window.addEventListener('resize', resizeCanvas);
+    if (typeof ResizeObserver !== 'undefined' && $('stage')) {
+      new ResizeObserver(() => resizeCanvas()).observe($('stage'));
+    }
+    $('retryNetBtn').addEventListener('click', () => retryLiveMap(true));
+    $('hudRetryBtn').addEventListener('click', () => retryLiveMap(true));
+    window.addEventListener('online', () => retryLiveMap(true));
+    window.addEventListener('offline', () => {
+      state.netOffline = true;
+      updateNetUI(false, 'No Network');
+      showOfflineHint(true);
+    });
+    window.addEventListener('focus', () => {
+      if (!state.inspectCmap && (state.netOffline || !state.tileTemplate || hasErrorTiles())) {
+        retryLiveMap(false);
+      }
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !state.inspectCmap && (state.netOffline || !state.tileTemplate || hasErrorTiles())) {
+        retryLiveMap(false);
+      }
+    });
+    setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden && !state.inspectCmap
+          && navigator.onLine !== false && (state.netOffline || !state.tileTemplate || hasErrorTiles())) {
+        retryLiveMap(false);
+      }
+    }, 4000);
+
     resizeCanvas();
     $('packNameInput').value = 'Agra';
     updateCutMetrics();
+    getTileTemplate(false).catch(() => {});
     requestAnimationFrame(renderFrame);
   }
 })();
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a600f13b0876867b',t:'MTc5NTYxMjczNw=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a600f13b0876867b',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
